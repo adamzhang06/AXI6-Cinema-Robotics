@@ -1,7 +1,4 @@
-"""
-Demo file for basic movement without UART (only STEP/DIR/EN control)
-"""
-
+import sys
 from tmc_driver import (
     Tmc2209,
     Loglevel,
@@ -10,79 +7,70 @@ from tmc_driver import (
     TmcMotionControlStepDir,
 )
 
+def rotate_degrees(tmc, degrees):
+    # Calculate steps based on 1600 steps per 360-degree revolution
+    steps = int((degrees / 360.0) * 1600)
+    
+    print(f"Executing: {degrees} degrees -> {steps} steps")
+    # Use RELATIVE movement so it rotates from its current position
+    tmc.run_to_position_steps(steps, MovementAbsRel.RELATIVE)
 
-print("---")
-print("SCRIPT START")
-print("---")
+def main():
+    print("---")
+    print("AXI6 Interactive Degree Controller")
+    print("---")
 
+    # -----------------------------------------------------------------------
+    # Initiate the Tmc2209 class
+    # (Using the pins from your successful test: EN=21, STEP=16, DIR=20)
+    # -----------------------------------------------------------------------
+    tmc = Tmc2209(
+        TmcEnableControlPin(21),
+        TmcMotionControlStepDir(16, 20),
+        loglevel=Loglevel.INFO, # Set to INFO so it doesn't spam the terminal with debug text
+    )
 
-# -----------------------------------------------------------------------
-# initiate the Tmc2209 class
-# use your pins for pin_en, pin_step, pin_dir here
-# -----------------------------------------------------------------------
-tmc = Tmc2209(
-    TmcEnableControlPin(21),
-    TmcMotionControlStepDir(16, 20),
-    loglevel=Loglevel.DEBUG,
-)
+    # Set the Acceleration and maximal Speed in fullsteps
+    tmc.acceleration_fullstep = 1000
+    tmc.max_speed_fullstep = 250
 
+    # Activate the motor current output
+    tmc.set_motor_enabled(True)
+    print("Motor Enabled. Holding torque active.\n")
 
-# -----------------------------------------------------------------------
-# set the loglevel of the libary (currently only printed)
-# set whether the movement should be relative or absolute
-# both optional
-# -----------------------------------------------------------------------
-tmc.tmc_logger.loglevel = Loglevel.DEBUG
-tmc.movement_abs_rel = MovementAbsRel.ABSOLUTE
+    try:
+        # -----------------------------------------------------------------------
+        # Terminal Input Loop
+        # -----------------------------------------------------------------------
+        while True:
+            user_input = input("Enter degrees to rotate (0-360) or 'q' to quit: ")
+            
+            if user_input.lower() == 'q':
+                break
+                
+            try:
+                degrees = float(user_input)
+                # Allow negative numbers if you want to rotate backward!
+                if -360 <= degrees <= 360:
+                    rotate_degrees(tmc, degrees)
+                else:
+                    print("Please enter a value between -360 and 360.")
+            except ValueError:
+                print("Invalid input. Please enter a valid number.")
 
+    except KeyboardInterrupt:
+        print("\nTest interrupted by user.")
+        
+    finally:
+        # -----------------------------------------------------------------------
+        # Safe Shutdown Sequence
+        # -----------------------------------------------------------------------
+        print("\nDeactivating motor...")
+        tmc.set_motor_enabled(False)
+        del tmc
+        print("---")
+        print("SCRIPT FINISHED")
+        print("---")
 
-# -----------------------------------------------------------------------
-# set the Acceleration and maximal Speed
-# -----------------------------------------------------------------------
-# tmc.set_acceleration(2000)
-# tmc.set_max_speed(500)
-
-# -----------------------------------------------------------------------
-# set the Acceleration and maximal Speed in fullsteps
-# -----------------------------------------------------------------------
-tmc.acceleration_fullstep = 1000
-tmc.max_speed_fullstep = 250
-
-
-# -----------------------------------------------------------------------
-# activate the motor current output
-# -----------------------------------------------------------------------
-tmc.set_motor_enabled(True)
-
-
-# -----------------------------------------------------------------------
-# move the motor 1 revolution
-# -----------------------------------------------------------------------
-tmc.run_to_position_steps(400)  # move to position 400
-tmc.run_to_position_steps(0)  # move to position 0
-
-
-tmc.run_to_position_steps(400, MovementAbsRel.RELATIVE)  # move 400 steps forward
-tmc.run_to_position_steps(-400, MovementAbsRel.RELATIVE)  # move 400 steps backward
-
-
-tmc.run_to_position_steps(400)  # move to position 400
-tmc.run_to_position_steps(0)  # move to position 0
-
-
-# -----------------------------------------------------------------------
-# deactivate the motor current output
-# -----------------------------------------------------------------------
-tmc.set_motor_enabled(False)
-
-print("---\n---")
-
-
-# -----------------------------------------------------------------------
-# deinitiate the Tmc2209 class
-# -----------------------------------------------------------------------
-del tmc
-
-print("---")
-print("SCRIPT FINISHED")
-print("---")
+if __name__ == "__main__":
+    main()
