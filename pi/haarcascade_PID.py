@@ -90,7 +90,7 @@ def generate_frames():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
-    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75) 
+    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.9) 
 
     # Set manual exposure value
     # For Linux (V4L2 backend), values are often positive
