@@ -20,22 +20,21 @@ class RobotState:
 
 state = RobotState()
 
-# --- 2. MOTOR THREAD (With Throttled Debug Prints) ---
+# --- 2. MOTOR THREAD (Ultra-High Frequency + True Time Scaling) ---
 def motor_loop():
     tmc = Tmc2209(TmcEnableControlPin(21), TmcMotionControlStepDir(16, 20), loglevel=Loglevel.INFO)
     tmc.acceleration_fullstep = 800 
     tmc.set_motor_enabled(True)
     
+    # PID tuned for high-frequency updates
     kp, ki, kd = 0.9, 0.01, 1.2
     
     prev_error = 0
     integral = 0
     last_time = time.time() 
-    
-    # Counter to throttle terminal prints so we don't crash the Pi
     print_counter = 0
     
-    print("\n[THREAD] Pro Cinematic Glide + Debug Console Active")
+    print("\n[THREAD] 500Hz Time-Scaled Cinematic Glide Active")
     print("-" * 50)
     
     while state.running:
@@ -44,10 +43,15 @@ def motor_loop():
         if dt <= 0: dt = 0.001 
         
         if state.target_visible:
-            # Dropped this to 0.50 so it's fast, but doesn't cause a Derivative Kick
+            # 1. TRUE TIME-SCALED ELASTICITY
+            # The ghost now moves at a consistent speed based on time, not loop cycles.
+            # Change 'smoothness_factor' to adjust the glide. 
+            # (1.0 = very slow/heavy cinematic glide, 5.0 = fast/snappy follow)
+            smoothness_factor = 2.0 
             error = state.target_cx - state.ghost_cx
-            state.ghost_cx += error * 0.75
+            state.ghost_cx += error * (smoothness_factor * dt) 
             
+            # 2. Calculate PID
             motor_error = state.ghost_cx - CENTER_X
             
             if abs(motor_error) > DEADZONE:
@@ -57,7 +61,6 @@ def motor_loop():
                 derivative = (motor_error - prev_error) / dt
                 velocity = (kp * motor_error) + (ki * integral) + (kd * derivative)
                 
-                # Speed safety cap
                 final_speed = min(int(abs(velocity)), 500)
                 tmc.max_speed_fullstep = final_speed
                 
@@ -66,28 +69,25 @@ def motor_loop():
                 
                 prev_error = motor_error
                 
-                # --- PRINT: MOVING ---
-                if print_counter % 10 == 0:  # Print every 10th loop (10Hz)
+                if print_counter % 50 == 0:  # Print throttling adjusted for 500Hz
                     print(f"🏃 MOVE | Err: {motor_error:5.1f} | Vel Math: {velocity:6.1f} | Set Speed: {final_speed} | Dir: {direction}")
-                
             else:
                 tmc.max_speed_fullstep = 0
                 integral = 0 
                 
-                # --- PRINT: DEADZONE ---
-                if print_counter % 20 == 0:  # Print every 20th loop (5Hz)
-                    print(f"🎯 DEADZONE | Target Locked. Motor Stopped.")
+                if print_counter % 100 == 0:
+                    print(f"🎯 DEADZONE | Target Locked.")
         else:
             tmc.max_speed_fullstep = 0
             
-            # --- PRINT: TARGET LOST ---
-            if print_counter % 20 == 0:
+            if print_counter % 100 == 0:
                 print(f"🙈 LOST | Waiting for face detection...")
             
         print_counter += 1
         last_time = current_time
             
-        sleep_time = 0.01 - (time.time() - current_time)
+        # Pushing the loop to ~500Hz (2 milliseconds)
+        sleep_time = 0.002 - (time.time() - current_time)
         if sleep_time > 0:
             time.sleep(sleep_time)
             
