@@ -31,7 +31,7 @@ def motor_loop():
     # PID Tuning for "Smoothness"
     # kp: Low value for slow, graceful reaction
     # kd: High value to 'brake' and prevent overshoot
-    kp, ki, kd = 1.0, 0.01, 1.0
+    kp, ki, kd = 0.9, 0.01, 1.2
     
     prev_error = 0
     integral = 0
@@ -44,7 +44,7 @@ def motor_loop():
         if state.target_visible:
             # 1. Update Ghost (The smoothed target)
             error = state.target_cx - state.ghost_cx
-            state.ghost_cx += error * 0.25 # Slow follow for "weighty" feel
+            state.ghost_cx += error * 1 # Slow follow for "weighty" feel
             
             # 2. Calculate PID for Velocity
             motor_error = state.ghost_cx - CENTER_X
