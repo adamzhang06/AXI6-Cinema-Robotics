@@ -31,10 +31,10 @@ def motor_loop():
     tmc.set_motor_enabled(True)
     
     # PID Tuning
-    kp, ki, kd = 1.05, 0.01, 1.0
+    kp, ki, kd = 0.75, 0.01, 1.3
     
     # Master Speed Dial (0.25 = 25% of the raw PID velocity)
-    GLOBAL_SPEED_SCALE = 0.5
+    GLOBAL_SPEED_SCALE = 1
     
     prev_error = 0
     integral = 0
