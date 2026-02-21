@@ -46,7 +46,7 @@ class AXI6MotorController:
             
             # Inverse the direction if the motor moves away from you
             # (Remove the minus sign if it moves the wrong way)
-            self.rotate_degrees(-degrees_to_move) 
+            self.rotate_degrees(degrees_to_move) 
             
             self.last_move_time = current_time
 
