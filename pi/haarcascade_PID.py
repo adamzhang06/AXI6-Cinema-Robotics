@@ -9,7 +9,7 @@ from tmc_driver import (
 # --- 1. GLOBAL STATE ---
 WIDTH, HEIGHT = 320, 240
 CENTER_X = WIDTH // 2
-DEADZONE = 25 # Tightened for more professional framing
+DEADZONE = 25 
 
 class RobotState:
     def __init__(self):
@@ -20,61 +20,61 @@ class RobotState:
 
 state = RobotState()
 
-# --- 2. MOTOR THREAD (Cinematic Glide Logic) ---
+# --- 2. MOTOR THREAD (True Time PID) ---
 def motor_loop():
     tmc = Tmc2209(TmcEnableControlPin(21), TmcMotionControlStepDir(16, 20), loglevel=Loglevel.INFO)
-    
-    # Low acceleration creates the "Slow Start" cinematic look
     tmc.acceleration_fullstep = 800 
     tmc.set_motor_enabled(True)
     
-    # PID Tuning for "Smoothness"
-    # kp: Low value for slow, graceful reaction
-    # kd: High value to 'brake' and prevent overshoot
+    # Tuned for slow, graceful tracking
     kp, ki, kd = 0.9, 0.01, 1.2
     
     prev_error = 0
     integral = 0
+    last_time = time.time() # Track exact time for PID
     
-    print("[THREAD] Cinematic Glide Loop Active")
+    print("[THREAD] Pro Cinematic Glide Active")
     
     while state.running:
-        start_time = time.time()
+        current_time = time.time()
+        dt = current_time - last_time
+        if dt <= 0: dt = 0.001 # Prevent division by zero
         
         if state.target_visible:
-            # 1. Update Ghost (The smoothed target)
+            # 1. FIXED GHOST ELASTICITY
+            # Returned this to a fraction so it glides instead of teleports
             error = state.target_cx - state.ghost_cx
-            state.ghost_cx += error * 1 # Slow follow for "weighty" feel
+            state.ghost_cx += error * 0.99
             
-            # 2. Calculate PID for Velocity
+            # 2. Calculate PID
             motor_error = state.ghost_cx - CENTER_X
             
             if abs(motor_error) > DEADZONE:
-                # Basic PID math for velocity
-                dt = 0.01 
                 integral += motor_error * dt
-                derivative = (motor_error - prev_error) / dt
                 
+                # INTEGRAL ANTI-WINDUP (Caps the accumulated error)
+                integral = max(min(integral, 1000), -1000)
+                
+                derivative = (motor_error - prev_error) / dt
                 velocity = (kp * motor_error) + (ki * integral) + (kd * derivative)
                 
-                # 3. Apply Speed & Constant Step Size
-                # Max speed capped at 500 for cinematic safety
+                # Speed safety cap
                 tmc.max_speed_fullstep = min(int(abs(velocity)), 500)
                 
-                # CONSTANT STEP SIZE: 10 steps
                 direction = 10 if motor_error > 0 else -10
                 tmc.run_to_position_steps(direction, MovementAbsRel.RELATIVE)
                 
                 prev_error = motor_error
             else:
                 tmc.max_speed_fullstep = 0
-                integral = 0 # Reset integral to prevent windup in deadzone
+                integral = 0 
         else:
-            # FREEZE: Stop immediately if target is lost
             tmc.max_speed_fullstep = 0
             
-        # 100Hz frequency
-        sleep_time = 0.01 - (time.time() - start_time)
+        last_time = current_time
+            
+        # Safe Sleep Calculation
+        sleep_time = 0.01 - (time.time() - current_time)
         if sleep_time > 0:
             time.sleep(sleep_time)
             
@@ -89,11 +89,23 @@ def generate_frames():
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    
+    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75) 
 
+    # Set manual exposure value
+    # For Linux (V4L2 backend), values are often positive
+    exposure_value = 2  # Example value, adjust as needed
+    cap.set(cv2.CAP_PROP_EXPOSURE, exposure_value)
+    
     try:
         while state.running:
             success, frame = cap.read()
-            if not success: break
+            
+            # CRASH PREVENTION: Skip loop if the camera dropped a frame
+            if not success or frame is None: 
+                time.sleep(0.01)
+                continue
+                
             frame = cv2.resize(frame, (WIDTH, HEIGHT))
             frame = cv2.flip(frame, 1)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -105,13 +117,11 @@ def generate_frames():
                 state.target_cx = x + (w // 2)
                 state.target_visible = True
                 
-                # Visuals: Target (Green), Ghost (Red), Deadzone (Yellow)
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
                 cv2.circle(frame, (int(state.ghost_cx), y + (h // 2)), 6, (0, 0, 255), 2)
             else:
                 state.target_visible = False
 
-            # HUD
             cv2.line(frame, (CENTER_X - DEADZONE, 0), (CENTER_X - DEADZONE, HEIGHT), (0, 255, 255), 1)
             cv2.line(frame, (CENTER_X + DEADZONE, 0), (CENTER_X + DEADZONE, HEIGHT), (0, 255, 255), 1)
 
