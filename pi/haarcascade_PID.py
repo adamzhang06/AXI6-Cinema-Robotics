@@ -50,7 +50,7 @@ def motor_loop():
                 # Non-linear speed mapping
                 normalized_error = (abs_error - DEADZONE) / (CENTER_X - DEADZONE)
                 velocity_multiplier = pow(normalized_error, 2.2) 
-                target_speed = 100 + (velocity_multiplier * 1300)
+                target_speed = 100 + (velocity_multiplier * 700)
                 
                 tmc.max_speed_fullstep = int(target_speed)
                 direction = 15 if motor_error > 0 else -15
