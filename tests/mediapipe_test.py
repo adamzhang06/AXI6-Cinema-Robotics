@@ -267,7 +267,7 @@ with vision.FaceDetector.create_from_options(options) as detector:
                 output_s, delay_s = slide_pid.compute(offset_x)
                 system_state["slide"]["dir"], system_state["slide"]["delay"] = ("RIGHT" if output_s > 0 else "LEFT"), delay_s
             else: system_state["slide"]["delay"], slide_pid.integral = 0.0, 0
-
+            
             if not system_state["pan"]["locked"] and abs(offset_x) > dz_pan:
                 output_p, delay_p = pan_pid.compute(offset_x)
                 system_state["pan"]["dir"], system_state["pan"]["delay"] = ("RIGHT" if output_p > 0 else "LEFT"), delay_p
