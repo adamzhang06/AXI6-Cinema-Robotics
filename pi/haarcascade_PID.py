@@ -19,48 +19,57 @@ class RobotState:
 
 state = RobotState()
 
-# --- 2. MOTOR THREAD (100Hz Logic) ---
+# --- 2. MOTOR THREAD (Dynamic Velocity) ---
 def motor_loop():
-    # Setup Driver
     tmc = Tmc2209(TmcEnableControlPin(21), TmcMotionControlStepDir(16, 20), loglevel=Loglevel.INFO)
-    tmc.acceleration_fullstep = 3500 
+    # High acceleration allows for the fast "snaps"
+    tmc.acceleration_fullstep = 5000 
     tmc.set_motor_enabled(True)
     
-    prev_error = 0
-    kd = 0.2 # Dampening for the ghost's movement
-    
-    print("[THREAD] High-Frequency Motor Loop Active")
+    print("[THREAD] Non-Linear Velocity Loop Active")
     
     while state.running:
         start_time = time.time()
         
-        # 1. Update the "Ghost" position toward the "Target"
-        # 0.15 is the 'Elasticity'. Increase for faster follow, decrease for smoother glide.
+        # 1. Update Ghost (The "Leash")
+        # Higher multiplier here (0.25) makes the ghost follow the target more tightly
         error = state.target_cx - state.ghost_cx
-        state.ghost_cx += error * 0.15 
+        state.ghost_cx += error * 0.25 
         
-        # 2. PID-style velocity control based on Ghost position
+        # 2. Distance from Center
         motor_error = state.ghost_cx - CENTER_X
+        abs_error = abs(motor_error)
         
-        # Check if Ghost is outside the deadzone
-        if abs(motor_error) > DEADZONE:
-            velocity = (motor_error * 9.0) + (kd * (motor_error - prev_error))
-            tmc.max_speed_fullstep = min(int(abs(velocity)), 1200)
-            direction = 18 if velocity > 0 else -18
+        if abs_error > DEADZONE:
+            # --- NON-LINEAR VELOCITY CALCULATION ---
+            # We normalize the error (0.0 to 1.0)
+            normalized_error = (abs_error - DEADZONE) / (CENTER_X - DEADZONE)
+            
+            # Use a power function (Exponent of 2.0 or 2.5) to create the curve
+            # This makes it crawl when close, and lunge when far.
+            velocity_multiplier = pow(normalized_error, 2.2) 
+            
+            # Map to actual speed (Max 1400, Min 100)
+            target_speed = 100 + (velocity_multiplier * 1300)
+            
+            # 3. Apply to Motor
+            tmc.max_speed_fullstep = int(target_speed)
+            direction = 15 if motor_error > 0 else -15
             tmc.run_to_position_steps(direction, MovementAbsRel.RELATIVE)
+            
+            # Debugging speed in terminal
+            # print(f"Error: {int(abs_error)} | Speed: {int(target_speed)}")
         else:
             tmc.max_speed_fullstep = 0
             
-        prev_error = motor_error
-        
-        # 100Hz Timing
+        # 100Hz frequency
         sleep_time = 0.01 - (time.time() - start_time)
         if sleep_time > 0:
             time.sleep(sleep_time)
             
     tmc.set_motor_enabled(False)
 
-# --- 3. VISION & WEB SERVER ---
+# --- 3. VISION & WEB SERVER (Standard) ---
 app = Flask(__name__)
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
@@ -78,26 +87,16 @@ def generate_frames():
             frame = cv2.flip(frame, 1)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             
-            # --- DRAW DEADZONE HUD ---
+            # HUD
             cv2.line(frame, (CENTER_X - DEADZONE, 0), (CENTER_X - DEADZONE, HEIGHT), (0, 255, 255), 1)
             cv2.line(frame, (CENTER_X + DEADZONE, 0), (CENTER_X + DEADZONE, HEIGHT), (0, 255, 255), 1)
 
             faces = face_cascade.detectMultiScale(gray, 1.2, 5)
-            
             if len(faces) > 0:
                 (x, y, w, h) = faces[0]
                 state.target_cx = x + (w // 2)
-                
-                # DRAW TARGET (Green) & GHOST (Red)
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                # Actual detected center
-                cv2.circle(frame, (int(state.target_cx), y + (h // 2)), 4, (0, 255, 0), -1)
-                # The "Ghost" center following the leash
                 cv2.circle(frame, (int(state.ghost_cx), y + (h // 2)), 6, (0, 0, 255), 2)
-
-                # Status Text
-                msg = "CHASING" if abs(state.ghost_cx - CENTER_X) > DEADZONE else "LOCKED"
-                cv2.putText(frame, msg, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
             ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
             yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
@@ -115,9 +114,7 @@ def index():
 if __name__ == "__main__":
     m_thread = threading.Thread(target=motor_loop, daemon=True)
     m_thread.start()
-    
     try:
         app.run(host='0.0.0.0', port=5000, threaded=True, debug=False)
     except KeyboardInterrupt:
         state.running = False
-        print("\nStopping AXI6...")
