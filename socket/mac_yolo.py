@@ -87,8 +87,8 @@ class StepperPID:
         
         speed = min(int(scaled_velocity), self.max_speed)
         
-        # Swapped back to 1 and -1 for the "Infinite Target" continuous drive logic
-        direction = 1 if error > 0 else -1 
+        # --- REVERTED THIS LINE: Back to 10-step chunks ---
+        direction = 10 if error > 0 else -10 
         
         return speed, direction
         
