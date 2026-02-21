@@ -19,9 +19,7 @@ BASE_DZ_SLIDE = 60
 BASE_DZ_PAN = 150
 BASE_DZ_TILT = 40
 
-# The dynamic deadzone factor (0.5 = shrinks to 50% of its size when recentering)
 RECENTER_RATIO = 0.5
-
 SMOOTHING_FACTOR = 0.25 
 MAX_TRACK_DIST = 250 
 GLOBAL_SPEED_SCALE = 1.0
@@ -62,11 +60,13 @@ def vision_worker():
 
 # --- 3. PID & EMA CLASSES ---
 class StepperPID:
-    def __init__(self, kp, ki, kd, max_speed):
+    # ADDED 'accel' PARAMETER HERE
+    def __init__(self, kp, ki, kd, max_speed, accel):
         self.kp = kp
         self.ki = ki
         self.kd = kd
         self.max_speed = max_speed
+        self.accel = accel 
         self.prev_error = 0
         self.integral = 0
         self.last_time = time.time()
@@ -86,7 +86,9 @@ class StepperPID:
         scaled_velocity = abs(raw_velocity) * GLOBAL_SPEED_SCALE
         
         speed = min(int(scaled_velocity), self.max_speed)
-        direction = 10 if error > 0 else -10 
+        
+        # Swapped back to 1 and -1 for the "Infinite Target" continuous drive logic
+        direction = 1 if error > 0 else -1 
         
         return speed, direction
         
@@ -107,9 +109,10 @@ vision_thread = threading.Thread(target=vision_worker, daemon=True)
 vision_thread.start()
 
 # --- 5. SETUP UTILS & PID ---
-slide_pid = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000)
-pan_pid   = StepperPID(kp=1, ki=0.01, kd=3.5, max_speed=2000)
-tilt_pid  = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000)
+# YOU CAN NOW INDEPENDENTLY TUNE THE ACCELERATION FOR EACH AXIS HERE
+slide_pid = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000, accel=400)
+pan_pid   = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000, accel=250) # Lower accel = smoother pan
+tilt_pid  = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000, accel=400)
 
 smoothers = {k: EMASmoother(SMOOTHING_FACTOR) for k in ["left", "right", "top", "bottom"]}
 
@@ -126,7 +129,7 @@ tracking_mode = "single"
 target_person_index = 0
 dz_scale = 1.0  
 STANDBY_COLOR = (255, 200, 50) 
-RECENTER_COLOR = (0, 0, 255) # Red for active snapping
+RECENTER_COLOR = (0, 0, 255) 
 
 expected_num_people = 0
 is_frozen = False
@@ -158,7 +161,6 @@ while cap.isOpened() and system_state["running"]:
     frame_h, frame_w, _ = frame.shape
     frame_center_x, frame_center_y = int(frame_w / 2), int(frame_h / 2)
     
-    # Calculate base deadzones for this frame
     base_dz_slide = int(BASE_DZ_SLIDE * dz_scale)
     base_dz_pan = int(BASE_DZ_PAN * dz_scale)
     base_dz_tilt = int(BASE_DZ_TILT * dz_scale)
@@ -239,7 +241,6 @@ while cap.isOpened() and system_state["running"]:
         cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
         draw_crosshair(frame, raw_cx, raw_cy, box_color, size=8, thickness=1)
 
-    # Variables for UI drawing so they sync perfectly with the logic
     active_dz_s = base_dz_slide
     active_dz_p = base_dz_pan
     active_dz_t = base_dz_tilt
@@ -266,13 +267,11 @@ while cap.isOpened() and system_state["running"]:
         target_cx, target_cy = (s_left + s_right) / 2, (s_top + s_bottom) / 2
         offset_x, offset_y = target_cx - frame_center_x, target_cy - frame_center_y
         
-        # --- SLIDE (X-Axis) ---
+        # --- SLIDE ---
         if not system_state["slide"]["locked"]:
             if not system_state["slide"]["recentering"] and abs(offset_x) > base_dz_slide:
                 system_state["slide"]["recentering"] = True
-            
             active_dz_s = int(base_dz_slide * RECENTER_RATIO) if system_state["slide"]["recentering"] else base_dz_slide
-            
             if system_state["slide"]["recentering"] and abs(offset_x) <= active_dz_s:
                 system_state["slide"]["recentering"] = False
                 active_dz_s = base_dz_slide
@@ -283,13 +282,11 @@ while cap.isOpened() and system_state["running"]:
                 system_state["slide"]["speed"], system_state["slide"]["dir"] = 0, 0
                 slide_pid.reset()
 
-        # --- PAN (X-Axis) ---
+        # --- PAN ---
         if not system_state["pan"]["locked"]:
             if not system_state["pan"]["recentering"] and abs(offset_x) > base_dz_pan:
                 system_state["pan"]["recentering"] = True
-            
             active_dz_p = int(base_dz_pan * RECENTER_RATIO) if system_state["pan"]["recentering"] else base_dz_pan
-            
             if system_state["pan"]["recentering"] and abs(offset_x) <= active_dz_p:
                 system_state["pan"]["recentering"] = False
                 active_dz_p = base_dz_pan
@@ -300,13 +297,11 @@ while cap.isOpened() and system_state["running"]:
                 system_state["pan"]["speed"], system_state["pan"]["dir"] = 0, 0
                 pan_pid.reset()
 
-        # --- TILT (Y-Axis) ---
+        # --- TILT ---
         if not system_state["tilt"]["locked"]:
             if not system_state["tilt"]["recentering"] and abs(offset_y) > base_dz_tilt:
                 system_state["tilt"]["recentering"] = True
-            
             active_dz_t = int(base_dz_tilt * RECENTER_RATIO) if system_state["tilt"]["recentering"] else base_dz_tilt
-            
             if system_state["tilt"]["recentering"] and abs(offset_y) <= active_dz_t:
                 system_state["tilt"]["recentering"] = False
                 active_dz_t = base_dz_tilt
@@ -328,10 +323,11 @@ while cap.isOpened() and system_state["running"]:
             cv2.circle(frame, (int(target_cx), int(target_cy)), 4, target_color, -1)
 
     # --- TRANSMIT DATA TO PI ---
+    # ADDED ACCEL TO THE PAYLOAD
     payload = json.dumps({
-        "slide": {"speed": system_state["slide"]["speed"], "dir": system_state["slide"]["dir"]},
-        "pan":   {"speed": system_state["pan"]["speed"],   "dir": system_state["pan"]["dir"]},
-        "tilt":  {"speed": system_state["tilt"]["speed"],  "dir": system_state["tilt"]["dir"]}
+        "slide": {"speed": system_state["slide"]["speed"], "dir": system_state["slide"]["dir"], "accel": slide_pid.accel},
+        "pan":   {"speed": system_state["pan"]["speed"],   "dir": system_state["pan"]["dir"],   "accel": pan_pid.accel},
+        "tilt":  {"speed": system_state["tilt"]["speed"],  "dir": system_state["tilt"]["dir"],  "accel": tilt_pid.accel}
     })
     udp_sock.sendto(payload.encode('utf-8'), (PI_IP, PI_PORT))
 
@@ -400,7 +396,7 @@ while cap.isOpened() and system_state["running"]:
     elif key == ord(']'): flicker_grace_sec = min(5.0, flicker_grace_sec + 0.1) 
 
 # Safe Shutdown
-stop_payload = json.dumps({"slide": {"speed":0,"dir":0}, "pan": {"speed":0,"dir":0}, "tilt": {"speed":0,"dir":0}})
+stop_payload = json.dumps({"slide": {"speed":0,"dir":0,"accel":0}, "pan": {"speed":0,"dir":0,"accel":0}, "tilt": {"speed":0,"dir":0,"accel":0}})
 udp_sock.sendto(stop_payload.encode('utf-8'), (PI_IP, PI_PORT))
 
 cap.release()

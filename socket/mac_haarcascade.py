@@ -9,9 +9,9 @@ PI_PORT = 5005
 udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # --- CONFIGURATION & PID ---
-WIDTH, HEIGHT = 320, 240
+WIDTH, HEIGHT = 1920, 1080
 CENTER_X = WIDTH // 2
-DEADZONE = 25 
+DEADZONE = 100
 
 kp, ki, kd = 0.075, 0.01, 3.5
 GLOBAL_SPEED_SCALE = 1
@@ -25,7 +25,7 @@ history_cx = []
 FILTER_SIZE = 4 
 
 # Mac Webcams: 0 is usually built-in, 1 is usually external (Logitech Brio)
-cap = cv2.VideoCapture(1) 
+cap = cv2.VideoCapture(0) 
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 print("\n[SYSTEM] Mac Vision & PID Brain Online.")
@@ -40,6 +40,9 @@ while True:
     frame = cv2.resize(frame, (WIDTH, HEIGHT))
     frame = cv2.flip(frame, 1)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    
+    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1) 
+    cap.set(cv2.CAP_PROP_EXPOSURE, 300)
     
     current_time = time.time()
     dt = current_time - last_time
