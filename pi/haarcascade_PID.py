@@ -20,21 +20,28 @@ class RobotState:
 
 state = RobotState()
 
-# --- 2. MOTOR THREAD (Ultra-High Frequency + True Time Scaling) ---
+# --- 2. MOTOR THREAD (Direct Input + Proportional Scaling) ---
 def motor_loop():
     tmc = Tmc2209(TmcEnableControlPin(21), TmcMotionControlStepDir(16, 20), loglevel=Loglevel.INFO)
-    tmc.acceleration_fullstep = 800 
+    
+    # Very low acceleration so it smoothly ramps up to the new slow speeds
+    tmc.acceleration_fullstep = 400 
     tmc.set_motor_enabled(True)
     
-    # PID tuned for high-frequency updates
+    # PID Tuning
     kp, ki, kd = 0.9, 0.01, 1.2
+    
+    # --- MASTER SPEED DIAL ---
+    # 1.0 = 100% speed. 0.3 = 30% speed.
+    # Lower this if it's still moving too fast!
+    GLOBAL_SPEED_SCALE = 0.25 
     
     prev_error = 0
     integral = 0
     last_time = time.time() 
     print_counter = 0
     
-    print("\n[THREAD] 500Hz Time-Scaled Cinematic Glide Active")
+    print("\n[THREAD] 500Hz Direct-Input Cinematic Glide Active")
     print("-" * 50)
     
     while state.running:
@@ -43,15 +50,10 @@ def motor_loop():
         if dt <= 0: dt = 0.001 
         
         if state.target_visible:
-            # 1. TRUE TIME-SCALED ELASTICITY
-            # The ghost now moves at a consistent speed based on time, not loop cycles.
-            # Change 'smoothness_factor' to adjust the glide. 
-            # (1.0 = very slow/heavy cinematic glide, 5.0 = fast/snappy follow)
-            smoothness_factor = 2.0 
-            error = state.target_cx - state.ghost_cx
-            state.ghost_cx += error * (smoothness_factor * dt) 
+            # 1. DIRECT MATCH: The Ghost instantly becomes the Target
+            state.ghost_cx = state.target_cx
             
-            # 2. Calculate PID
+            # 2. Calculate PID based on exact camera input
             motor_error = state.ghost_cx - CENTER_X
             
             if abs(motor_error) > DEADZONE:
@@ -59,9 +61,16 @@ def motor_loop():
                 integral = max(min(integral, 1000), -1000)
                 
                 derivative = (motor_error - prev_error) / dt
-                velocity = (kp * motor_error) + (ki * integral) + (kd * derivative)
                 
-                final_speed = min(int(abs(velocity)), 500)
+                # Raw PID Output
+                raw_velocity = (kp * motor_error) + (ki * integral) + (kd * derivative)
+                
+                # 3. PROPORTIONAL SLOWDOWN
+                # Shrink the velocity proportionally to make it cinematic
+                scaled_velocity = abs(raw_velocity) * GLOBAL_SPEED_SCALE
+                
+                # Hard cap at 200 for a slow, sweeping maximum speed
+                final_speed = min(int(scaled_velocity), 200)
                 tmc.max_speed_fullstep = final_speed
                 
                 direction = 10 if motor_error > 0 else -10
@@ -69,8 +78,8 @@ def motor_loop():
                 
                 prev_error = motor_error
                 
-                if print_counter % 50 == 0:  # Print throttling adjusted for 500Hz
-                    print(f"🏃 MOVE | Err: {motor_error:5.1f} | Vel Math: {velocity:6.1f} | Set Speed: {final_speed} | Dir: {direction}")
+                if print_counter % 50 == 0:  
+                    print(f"🏃 MOVE | Raw Vel: {raw_velocity:6.1f} | Scaled Spd: {final_speed} | Dir: {direction}")
             else:
                 tmc.max_speed_fullstep = 0
                 integral = 0 
@@ -86,7 +95,7 @@ def motor_loop():
         print_counter += 1
         last_time = current_time
             
-        # Pushing the loop to ~500Hz (2 milliseconds)
+        # 500Hz Loop
         sleep_time = 0.002 - (time.time() - current_time)
         if sleep_time > 0:
             time.sleep(sleep_time)
