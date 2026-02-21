@@ -6,7 +6,7 @@ from tmc_driver import (
     Tmc2209, Loglevel, MovementAbsRel, TmcEnableControlPin, TmcMotionControlStepDir,
 )
 
-# --- 1. GLOBAL STATE ---
+# --- 1. GLOBAL STATE & FILTER SETUP ---
 WIDTH, HEIGHT = 320, 240
 CENTER_X = WIDTH // 2
 DEADZONE = 25 
@@ -17,23 +17,23 @@ class RobotState:
         self.ghost_cx = CENTER_X   
         self.target_visible = False
         self.running = True
+        
+        # Moving Average Filter variables
+        self.history_cx = []
+        self.filter_size = 4  # Averages the last 4 frames. Increase to 6 for even more smoothing.
 
 state = RobotState()
 
-# --- 2. MOTOR THREAD (Direct Input + Proportional Scaling) ---
+# --- 2. MOTOR THREAD (500Hz Direct Input) ---
 def motor_loop():
     tmc = Tmc2209(TmcEnableControlPin(21), TmcMotionControlStepDir(16, 20), loglevel=Loglevel.INFO)
-    
-    # Very low acceleration so it smoothly ramps up to the new slow speeds
     tmc.acceleration_fullstep = 400 
     tmc.set_motor_enabled(True)
     
     # PID Tuning
     kp, ki, kd = 0.9, 0.01, 1.2
     
-    # --- MASTER SPEED DIAL ---
-    # 1.0 = 100% speed. 0.3 = 30% speed.
-    # Lower this if it's still moving too fast!
+    # Master Speed Dial (0.25 = 25% of the raw PID velocity)
     GLOBAL_SPEED_SCALE = 0.25 
     
     prev_error = 0
@@ -41,7 +41,7 @@ def motor_loop():
     last_time = time.time() 
     print_counter = 0
     
-    print("\n[THREAD] 500Hz Direct-Input Cinematic Glide Active")
+    print("\n[THREAD] 500Hz Cinematic Direct-Drive Active")
     print("-" * 50)
     
     while state.running:
@@ -50,29 +50,25 @@ def motor_loop():
         if dt <= 0: dt = 0.001 
         
         if state.target_visible:
-            # 1. DIRECT MATCH: The Ghost instantly becomes the Target
-            state.ghost_cx = state.target_cx
-            
-            # 2. Calculate PID based on exact camera input
+            # Calculate PID directly on the perfectly synced Ghost input
             motor_error = state.ghost_cx - CENTER_X
             
             if abs(motor_error) > DEADZONE:
                 integral += motor_error * dt
-                integral = max(min(integral, 1000), -1000)
+                integral = max(min(integral, 1000), -1000) # Anti-windup
                 
                 derivative = (motor_error - prev_error) / dt
                 
-                # Raw PID Output
                 raw_velocity = (kp * motor_error) + (ki * integral) + (kd * derivative)
                 
-                # 3. PROPORTIONAL SLOWDOWN
-                # Shrink the velocity proportionally to make it cinematic
+                # Proportional Slowdown
                 scaled_velocity = abs(raw_velocity) * GLOBAL_SPEED_SCALE
                 
-                # Hard cap at 200 for a slow, sweeping maximum speed
+                # Cap speed for safety and cinematic crawl
                 final_speed = min(int(scaled_velocity), 200)
                 tmc.max_speed_fullstep = final_speed
                 
+                # Constant micro-steps for fluid motion
                 direction = 10 if motor_error > 0 else -10
                 tmc.run_to_position_steps(direction, MovementAbsRel.RELATIVE)
                 
@@ -113,14 +109,13 @@ def generate_frames():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
-    # Exposure settings 
+    # Manual exposure (Adjust if too dark/bright)
     cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1) 
-    cap.set(cv2.CAP_PROP_EXPOSURE, 300)
+    cap.set(cv2.CAP_PROP_EXPOSURE, 400)
     
     try:
         while state.running:
             success, frame = cap.read()
-            
             if not success or frame is None: 
                 time.sleep(0.01)
                 continue
@@ -133,14 +128,29 @@ def generate_frames():
             
             if len(faces) > 0:
                 (x, y, w, h) = faces[0]
-                state.target_cx = x + (w // 2)
+                raw_cx = x + (w // 2)
+                
+                # --- APPLY MOVING AVERAGE FILTER ---
+                state.history_cx.append(raw_cx)
+                if len(state.history_cx) > state.filter_size:
+                    state.history_cx.pop(0)
+                
+                smooth_cx = sum(state.history_cx) / len(state.history_cx)
+                
+                # --- THE FIX: INSTANT SYNC ---
+                # Update Target and Ghost identically before drawing
+                state.target_cx = smooth_cx
+                state.ghost_cx = smooth_cx
                 state.target_visible = True
                 
+                # Visuals: Box and dot are now perfectly locked together
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                cv2.circle(frame, (int(state.ghost_cx), y + (h // 2)), 6, (0, 0, 255), 2)
+                cv2.circle(frame, (int(state.ghost_cx), y + (h // 2)), 6, (0, 0, 255), -1) 
             else:
                 state.target_visible = False
+                state.history_cx.clear() # Dump the filter history so we don't start with old data next time
 
+            # Draw HUD
             cv2.line(frame, (CENTER_X - DEADZONE, 0), (CENTER_X - DEADZONE, HEIGHT), (0, 255, 255), 1)
             cv2.line(frame, (CENTER_X + DEADZONE, 0), (CENTER_X + DEADZONE, HEIGHT), (0, 255, 255), 1)
 
