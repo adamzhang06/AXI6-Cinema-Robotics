@@ -94,7 +94,7 @@ def generate_frames():
 
     # Set manual exposure value
     # For Linux (V4L2 backend), values are often positive
-    exposure_value = 2  # Example value, adjust as needed
+    exposure_value = 10  # Example value, adjust as needed
     cap.set(cv2.CAP_PROP_EXPOSURE, exposure_value)
     
     try:
