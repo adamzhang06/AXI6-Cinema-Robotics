@@ -106,3 +106,12 @@ def motor_loop():
             
     pan_motor.set_motor_enabled(False)
     print("\n[SHUTDOWN] Motors safely disabled.")
+
+if __name__ == "__main__":
+    net_thread = threading.Thread(target=udp_listener, daemon=True)
+    net_thread.start()
+    
+    try:
+        motor_loop()
+    except KeyboardInterrupt:
+        state.running = False
