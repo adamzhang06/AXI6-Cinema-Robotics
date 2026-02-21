@@ -29,7 +29,7 @@ def main():
         TmcMotionControlStepDir(16, 20),
         loglevel=Loglevel.INFO, # Set to INFO so it doesn't spam the terminal with debug text
     )
-
+    
     # Set the Acceleration and maximal Speed in fullsteps
     tmc.acceleration_fullstep = 1000
     tmc.max_speed_fullstep = 250
