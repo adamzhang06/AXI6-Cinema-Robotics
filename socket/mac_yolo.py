@@ -109,10 +109,10 @@ vision_thread = threading.Thread(target=vision_worker, daemon=True)
 vision_thread.start()
 
 # --- 5. SETUP UTILS & PID ---
-# YOU CAN NOW INDEPENDENTLY TUNE THE ACCELERATION FOR EACH AXIS HERE
-slide_pid = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000, accel=400)
-pan_pid   = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000, accel=250) # Lower accel = smoother pan
-tilt_pid  = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000, accel=400)
+# Dropped max_speed to 300 to stop it from violently whipping around
+slide_pid = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=400)
+pan_pid   = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=200) # 200 accel makes it start slow
+tilt_pid  = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=400)
 
 smoothers = {k: EMASmoother(SMOOTHING_FACTOR) for k in ["left", "right", "top", "bottom"]}
 
