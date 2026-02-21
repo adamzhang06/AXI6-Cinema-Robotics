@@ -90,11 +90,11 @@ def generate_frames():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
-    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.9) 
-
-    # Set manual exposure value
-    # For Linux (V4L2 backend), values are often positive
-    exposure_value = 10  # Example value, adjust as needed
+    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1) 
+    
+    # Increase this number to make it brighter. 
+    # 10 is almost pitch black. 150-300 is usually the sweet spot for indoors.
+    exposure_value = 200  
     cap.set(cv2.CAP_PROP_EXPOSURE, exposure_value)
     
     try:
