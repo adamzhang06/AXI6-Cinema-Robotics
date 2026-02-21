@@ -31,7 +31,7 @@ def motor_loop():
     # PID Tuning for "Smoothness"
     # kp: Low value for slow, graceful reaction
     # kd: High value to 'brake' and prevent overshoot
-    kp, ki, kd = 3.5, 0.01, 0.6
+    kp, ki, kd = 2.0, 0.01, 0.8
     
     prev_error = 0
     integral = 0
