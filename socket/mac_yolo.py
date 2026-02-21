@@ -88,7 +88,7 @@ class StepperPID:
         speed = min(int(scaled_velocity), self.max_speed)
         
         # --- REVERTED THIS LINE: Back to 10-step chunks ---
-        direction = 10 if error > 0 else -10 
+        direction = 1 if error > 0 else -1
         
         return speed, direction
         
@@ -111,7 +111,7 @@ vision_thread.start()
 # --- 5. SETUP UTILS & PID ---
 # Dropped max_speed to 300 to stop it from violently whipping around
 slide_pid = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=400)
-pan_pid   = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=200) # 200 accel makes it start slow
+pan_pid   = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=2000) # 200 accel makes it start slow
 tilt_pid  = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=400)
 
 smoothers = {k: EMASmoother(SMOOTHING_FACTOR) for k in ["left", "right", "top", "bottom"]}
