@@ -6,65 +6,75 @@ from tmc_driver import (
     Tmc2209, Loglevel, MovementAbsRel, TmcEnableControlPin, TmcMotionControlStepDir,
 )
 
-# --- 1. GLOBAL STATE & CONSTANTS ---
+# --- 1. GLOBAL STATE ---
 WIDTH, HEIGHT = 320, 240
 CENTER_X = WIDTH // 2
-DEADZONE = 30 
-LOST_TARGET_TIMEOUT = 1.0  # Seconds before the motor stops after losing face
+DEADZONE = 25 # Tightened for more professional framing
 
 class RobotState:
     def __init__(self):
         self.target_cx = CENTER_X 
         self.ghost_cx = CENTER_X   
-        self.last_seen = 0   # Timestamp of last face detection
         self.target_visible = False
         self.running = True
 
 state = RobotState()
 
-# --- 2. MOTOR THREAD (Velocity + Timeout Logic) ---
+# --- 2. MOTOR THREAD (Cinematic Glide Logic) ---
 def motor_loop():
     tmc = Tmc2209(TmcEnableControlPin(21), TmcMotionControlStepDir(16, 20), loglevel=Loglevel.INFO)
-    tmc.acceleration_fullstep = 5000 
+    
+    # Low acceleration creates the "Slow Start" cinematic look
+    tmc.acceleration_fullstep = 800 
     tmc.set_motor_enabled(True)
     
-    print("[THREAD] Non-Linear Velocity & Failsafe Loop Active")
+    # PID Tuning for "Smoothness"
+    # kp: Low value for slow, graceful reaction
+    # kd: High value to 'brake' and prevent overshoot
+    kp, ki, kd = 3.5, 0.01, 0.6
+    
+    prev_error = 0
+    integral = 0
+    
+    print("[THREAD] Cinematic Glide Loop Active")
     
     while state.running:
         start_time = time.time()
-        now = time.time()
         
-        # 1. Update Ghost Toward Target
-        error = state.target_cx - state.ghost_cx
-        state.ghost_cx += error * 0.25 
-        
-        # 2. CHECK FAILSAFE: Has the target been gone too long?
-        # We only move if the face is visible OR if we are within the 1s grace period
-        time_since_seen = now - state.last_seen
-        
-        if time_since_seen < LOST_TARGET_TIMEOUT:
-            motor_error = state.ghost_cx - CENTER_X
-            abs_error = abs(motor_error)
+        if state.target_visible:
+            # 1. Update Ghost (The smoothed target)
+            error = state.target_cx - state.ghost_cx
+            state.ghost_cx += error * 0.15 # Slow follow for "weighty" feel
             
-            if abs_error > DEADZONE:
-                # Non-linear speed mapping
-                normalized_error = (abs_error - DEADZONE) / (CENTER_X - DEADZONE)
-                velocity_multiplier = pow(normalized_error, 2.2) 
-                target_speed = 100 + (velocity_multiplier * 700)
+            # 2. Calculate PID for Velocity
+            motor_error = state.ghost_cx - CENTER_X
+            
+            if abs(motor_error) > DEADZONE:
+                # Basic PID math for velocity
+                dt = 0.01 
+                integral += motor_error * dt
+                derivative = (motor_error - prev_error) / dt
                 
-                tmc.max_speed_fullstep = int(target_speed)
-                direction = 15 if motor_error > 0 else -15
+                velocity = (kp * motor_error) + (ki * integral) + (kd * derivative)
+                
+                # 3. Apply Speed & Constant Step Size
+                # Max speed capped at 500 for cinematic safety
+                tmc.max_speed_fullstep = min(int(abs(velocity)), 500)
+                
+                # CONSTANT STEP SIZE: 10 steps
+                direction = 10 if motor_error > 0 else -10
                 tmc.run_to_position_steps(direction, MovementAbsRel.RELATIVE)
+                
+                prev_error = motor_error
             else:
                 tmc.max_speed_fullstep = 0
+                integral = 0 # Reset integral to prevent windup in deadzone
         else:
-            # SHUTDOWN MOVEMENT: Target is truly lost
+            # FREEZE: Stop immediately if target is lost
             tmc.max_speed_fullstep = 0
-            # Optional: Slowly reset ghost to center so next detection isn't a huge jump
-            state.ghost_cx += (CENTER_X - state.ghost_cx) * 0.05
             
         # 100Hz frequency
-        sleep_time = 0.01 - (time.time() - (start_time))
+        sleep_time = 0.01 - (time.time() - start_time)
         if sleep_time > 0:
             time.sleep(sleep_time)
             
@@ -88,28 +98,22 @@ def generate_frames():
             frame = cv2.flip(frame, 1)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             
-            faces = face_cascade.detectMultiScale(gray, 1.2, 5)
+            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
             
             if len(faces) > 0:
                 (x, y, w, h) = faces[0]
-                # Update State
                 state.target_cx = x + (w // 2)
-                state.last_seen = time.time() # Reset the timeout clock
                 state.target_visible = True
                 
-                # Visuals
+                # Visuals: Target (Green), Ghost (Red), Deadzone (Yellow)
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
                 cv2.circle(frame, (int(state.ghost_cx), y + (h // 2)), 6, (0, 0, 255), 2)
             else:
                 state.target_visible = False
 
-            # HUD indicators
-            status_color = (0, 255, 0) if state.target_visible else (0, 0, 255)
-            status_text = "LOCKED" if state.target_visible else "LOST (GRACE PERIOD)"
-            if time.time() - state.last_seen > LOST_TARGET_TIMEOUT:
-                status_text = "IDLE - NO TARGET"
-                
-            cv2.putText(frame, status_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, status_color, 2)
+            # HUD
+            cv2.line(frame, (CENTER_X - DEADZONE, 0), (CENTER_X - DEADZONE, HEIGHT), (0, 255, 255), 1)
+            cv2.line(frame, (CENTER_X + DEADZONE, 0), (CENTER_X + DEADZONE, HEIGHT), (0, 255, 255), 1)
 
             ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
             yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
