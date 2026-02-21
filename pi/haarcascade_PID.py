@@ -20,65 +20,79 @@ class RobotState:
 
 state = RobotState()
 
-# --- 2. MOTOR THREAD (True Time PID) ---
+# --- 2. MOTOR THREAD (With Throttled Debug Prints) ---
 def motor_loop():
     tmc = Tmc2209(TmcEnableControlPin(21), TmcMotionControlStepDir(16, 20), loglevel=Loglevel.INFO)
     tmc.acceleration_fullstep = 800 
     tmc.set_motor_enabled(True)
     
-    # Tuned for slow, graceful tracking
     kp, ki, kd = 0.9, 0.01, 1.2
     
     prev_error = 0
     integral = 0
-    last_time = time.time() # Track exact time for PID
+    last_time = time.time() 
     
-    print("[THREAD] Pro Cinematic Glide Active")
+    # Counter to throttle terminal prints so we don't crash the Pi
+    print_counter = 0
+    
+    print("\n[THREAD] Pro Cinematic Glide + Debug Console Active")
+    print("-" * 50)
     
     while state.running:
         current_time = time.time()
         dt = current_time - last_time
-        if dt <= 0: dt = 0.001 # Prevent division by zero
+        if dt <= 0: dt = 0.001 
         
         if state.target_visible:
-            # 1. FIXED GHOST ELASTICITY
-            # Returned this to a fraction so it glides instead of teleports
+            # Dropped this to 0.50 so it's fast, but doesn't cause a Derivative Kick
             error = state.target_cx - state.ghost_cx
-            state.ghost_cx += error * 0.99
+            state.ghost_cx += error * 0.75
             
-            # 2. Calculate PID
             motor_error = state.ghost_cx - CENTER_X
             
             if abs(motor_error) > DEADZONE:
                 integral += motor_error * dt
-                
-                # INTEGRAL ANTI-WINDUP (Caps the accumulated error)
                 integral = max(min(integral, 1000), -1000)
                 
                 derivative = (motor_error - prev_error) / dt
                 velocity = (kp * motor_error) + (ki * integral) + (kd * derivative)
                 
                 # Speed safety cap
-                tmc.max_speed_fullstep = min(int(abs(velocity)), 500)
+                final_speed = min(int(abs(velocity)), 500)
+                tmc.max_speed_fullstep = final_speed
                 
                 direction = 10 if motor_error > 0 else -10
                 tmc.run_to_position_steps(direction, MovementAbsRel.RELATIVE)
                 
                 prev_error = motor_error
+                
+                # --- PRINT: MOVING ---
+                if print_counter % 10 == 0:  # Print every 10th loop (10Hz)
+                    print(f"🏃 MOVE | Err: {motor_error:5.1f} | Vel Math: {velocity:6.1f} | Set Speed: {final_speed} | Dir: {direction}")
+                
             else:
                 tmc.max_speed_fullstep = 0
                 integral = 0 
+                
+                # --- PRINT: DEADZONE ---
+                if print_counter % 20 == 0:  # Print every 20th loop (5Hz)
+                    print(f"🎯 DEADZONE | Target Locked. Motor Stopped.")
         else:
             tmc.max_speed_fullstep = 0
             
+            # --- PRINT: TARGET LOST ---
+            if print_counter % 20 == 0:
+                print(f"🙈 LOST | Waiting for face detection...")
+            
+        print_counter += 1
         last_time = current_time
             
-        # Safe Sleep Calculation
         sleep_time = 0.01 - (time.time() - current_time)
         if sleep_time > 0:
             time.sleep(sleep_time)
             
     tmc.set_motor_enabled(False)
+    print("\n[SHUTDOWN] Motor thread safely disabled.")
 
 # --- 3. VISION & SERVER ---
 app = Flask(__name__)
@@ -90,18 +104,14 @@ def generate_frames():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
+    # Exposure settings 
     cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1) 
-    
-    # Increase this number to make it brighter. 
-    # 10 is almost pitch black. 150-300 is usually the sweet spot for indoors.
-    exposure_value = 200  
-    cap.set(cv2.CAP_PROP_EXPOSURE, exposure_value)
+    cap.set(cv2.CAP_PROP_EXPOSURE, 300)
     
     try:
         while state.running:
             success, frame = cap.read()
             
-            # CRASH PREVENTION: Skip loop if the camera dropped a frame
             if not success or frame is None: 
                 time.sleep(0.01)
                 continue
