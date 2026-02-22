@@ -10,8 +10,6 @@ import time
 import math
 import threading
 import RPi.GPIO as GPIO
-from tmc_driver import Tmc2209, Loglevel, TmcEnableControlPin, TmcMotionControlStepDir, Board, tmc_gpio
-from tmc_driver.com import TmcComUart
 
 
 print("---")
@@ -76,43 +74,23 @@ b_step_times = calculate_step_times(b_steps_float, target_time, phases=3.0)
 print(f"\nCalculated Motor A: {len(a_step_times)} steps | Motor B: {len(b_step_times)} steps.")
 
 # -----------------------------------------------------------------------
-# 3. Initiate TMC2209s (Only for Driver Enable via library)
-# -----------------------------------------------------------------------
-UART_PORT = {
-    Board.RASPBERRY_PI: "/dev/serial0",
-    Board.RASPBERRY_PI5: "/dev/ttyAMA0",
-    Board.NVIDIA_JETSON: "/dev/ttyTHS1",
-}
-
-tmcA = Tmc2209(
-    TmcEnableControlPin(21),
-    TmcMotionControlStepDir(16, 20),
-    TmcComUart(UART_PORT.get(tmc_gpio.BOARD, "/dev/serial0")),
-    loglevel=Loglevel.INFO,
-)
-
-tmcB = Tmc2209(
-    TmcEnableControlPin(26),
-    TmcMotionControlStepDir(13, 19),
-    TmcComUart(UART_PORT.get(tmc_gpio.BOARD, "/dev/serial0")),
-    loglevel=Loglevel.INFO,
-)
-
-tmcA.set_motor_enabled(True)
-tmcB.set_motor_enabled(True)
-
-# -----------------------------------------------------------------------
-# 4. Setup GPIO for Direct High-Speed Control
+# 3. Setup GPIO for Direct High-Speed Control
 # -----------------------------------------------------------------------
 PAN_STEP = 16
 PAN_DIR = 20
+PAN_EN = 21
 
 TILT_STEP = 13
 TILT_DIR = 19
+TILT_EN = 26
 
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)
-GPIO.setup([PAN_STEP, PAN_DIR, TILT_STEP, TILT_DIR], GPIO.OUT)
+GPIO.setup([PAN_STEP, PAN_DIR, PAN_EN, TILT_STEP, TILT_DIR, TILT_EN], GPIO.OUT)
+
+# Enable the motors (LOW = Enabled for TMC2209)
+GPIO.output(PAN_EN, GPIO.LOW)
+GPIO.output(TILT_EN, GPIO.LOW)
 
 # Set directions physically
 # Note: In our pi/server.py architecture, Motor B is inverted
@@ -157,10 +135,9 @@ print(f"Dual-Move complete. Expected time: {target_time}s | Actual time: {actual
 # -----------------------------------------------------------------------
 # Clean up
 # -----------------------------------------------------------------------
-tmcA.set_motor_enabled(False)
-tmcB.set_motor_enabled(False)
-del tmcA
-del tmcB
+# Disable motors (HIGH = Disabled)
+GPIO.output(PAN_EN, GPIO.HIGH)
+GPIO.output(TILT_EN, GPIO.HIGH)
 
 print("---")
 print("SCRIPT FINISHED")
