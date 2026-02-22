@@ -31,11 +31,150 @@ VACTUAL_TO_RPS = 0.715  # Approximate: 1 RPS ≈ VACTUAL of ~1398 (12MHz clock)
 # Time must be strictly increasing. First point should be (0, starting_position).
 
 WAYPOINTS = [
-    # (time_s, position_deg)
-    (0,    0),      # Start at 0°
-    (3,    90),     # Reach 90° at t=3s
-    (4,    270),    # Reach 270° at t=8s
-    (7,   360),      # Return to 0° at t=13s
+    # Segment 1: 0° → 90° over 3s (ease in/out)
+    (0.00,   0.0),
+    (0.05,   0.1),
+    (0.10,   0.3),
+    (0.15,   0.7),
+    (0.20,   1.3),
+    (0.25,   2.0),
+    (0.30,   2.8),
+    (0.35,   3.8),
+    (0.40,   4.9),
+    (0.45,   6.1),
+    (0.50,   7.5),
+    (0.55,   9.0),
+    (0.60,  10.6),
+    (0.65,  12.3),
+    (0.70,  14.1),
+    (0.75,  16.1),
+    (0.80,  18.1),
+    (0.85,  20.2),
+    (0.90,  22.4),
+    (0.95,  24.7),
+    (1.00,  27.0),
+    (1.05,  29.4),
+    (1.10,  31.8),
+    (1.15,  34.2),
+    (1.20,  36.7),
+    (1.25,  39.1),
+    (1.30,  41.5),
+    (1.35,  43.9),
+    (1.40,  46.2),
+    (1.45,  48.5),
+    (1.50,  50.7),
+    (1.55,  52.8),
+    (1.60,  54.9),
+    (1.65,  56.9),
+    (1.70,  58.8),
+    (1.75,  60.6),
+    (1.80,  62.4),
+    (1.85,  64.0),
+    (1.90,  65.6),
+    (1.95,  67.1),
+    (2.00,  68.5),
+    (2.05,  69.8),
+    (2.10,  71.0),
+    (2.15,  72.2),
+    (2.20,  73.3),
+    (2.25,  74.3),
+    (2.30,  75.3),
+    (2.35,  76.2),
+    (2.40,  77.1),
+    (2.45,  77.9),
+    (2.50,  78.7),
+    (2.55,  79.4),
+    (2.60,  80.1),
+    (2.65,  80.8),
+    (2.70,  81.5),
+    (2.75,  82.2),
+    (2.80,  82.9),
+    (2.85,  83.7),
+    (2.90,  84.6),
+    (2.95,  85.8),
+    (3.00,  90.0),
+    # Segment 2: 90° → 270° over 1s (ease in/out)
+    (3.05,  92.7),
+    (3.10,  97.2),
+    (3.15, 103.5),
+    (3.20, 111.6),
+    (3.25, 121.5),
+    (3.30, 132.9),
+    (3.35, 145.2),
+    (3.40, 157.8),
+    (3.45, 170.1),
+    (3.50, 180.0),
+    (3.55, 189.9),
+    (3.60, 199.8),
+    (3.65, 209.1),
+    (3.70, 217.1),
+    (3.75, 225.0),
+    (3.80, 232.9),
+    (3.85, 240.6),
+    (3.90, 248.4),
+    (3.95, 256.5),
+    (4.00, 270.0),
+    # Segment 3: 270° → 360° over 3s (ease in/out)
+    (4.05, 271.2),
+    (4.10, 272.2),
+    (4.15, 273.0),
+    (4.20, 273.8),
+    (4.25, 274.5),
+    (4.30, 275.2),
+    (4.35, 275.9),
+    (4.40, 276.6),
+    (4.45, 277.3),
+    (4.50, 278.0),
+    (4.55, 278.8),
+    (4.60, 279.6),
+    (4.65, 280.5),
+    (4.70, 281.5),
+    (4.75, 282.6),
+    (4.80, 283.8),
+    (4.85, 285.0),
+    (4.90, 286.4),
+    (4.95, 287.8),
+    (5.00, 289.3),
+    (5.05, 290.9),
+    (5.10, 292.5),
+    (5.15, 294.2),
+    (5.20, 295.9),
+    (5.25, 297.7),
+    (5.30, 299.4),
+    (5.35, 301.2),
+    (5.40, 303.0),
+    (5.45, 304.7),
+    (5.50, 306.4),
+    (5.55, 308.1),
+    (5.60, 309.7),
+    (5.65, 311.2),
+    (5.70, 312.7),
+    (5.75, 314.1),
+    (5.80, 315.4),
+    (5.85, 316.7),
+    (5.90, 317.9),
+    (5.95, 319.0),
+    (6.00, 320.0),
+    (6.05, 321.0),
+    (6.10, 322.0),
+    (6.15, 323.0),
+    (6.20, 324.0),
+    (6.25, 325.1),
+    (6.30, 326.2),
+    (6.35, 327.4),
+    (6.40, 328.8),
+    (6.45, 330.3),
+    (6.50, 332.1),
+    (6.55, 334.0),
+    (6.60, 336.2),
+    (6.65, 338.5),
+    (6.70, 341.1),
+    (6.75, 343.9),
+    (6.80, 347.0),
+    (6.85, 350.2),
+    (6.90, 353.6),
+    (6.95, 357.0),
+    (7.00, 360.0),
 ]
 
 def deg_to_steps(deg):
@@ -110,46 +249,9 @@ def run_trajectory(waypoints):
     actual_total = time.time() - t_start
     print(f"\n  Done! Total time: {actual_total:.2f}s (expected {waypoints[-1][0]}s)")
 
-# ==================== SMOOTHING ====================
-def smooth_waypoints(waypoints, update_hz=20):
-    """
-    Take coarse waypoints and interpolate into fine sub-steps
-    using cubic spline for smooth velocity transitions.
-    
-    update_hz: how often to update VACTUAL (20 = every 50ms)
-    """
-    import numpy as np
-
-    times = [w[0] for w in waypoints]
-    positions = [w[1] for w in waypoints]
-
-    # Total duration
-    t_end = times[-1]
-    num_points = int(t_end * update_hz)
-
-    # Fine time steps
-    t_fine = np.linspace(0, t_end, num_points + 1)
-
-    # Cubic spline interpolation (smooth position = smooth velocity)
-    from numpy import interp
-    try:
-        from scipy.interpolate import CubicSpline
-        cs = CubicSpline(times, positions, bc_type='clamped')  # Zero velocity at start/end
-        p_fine = cs(t_fine)
-    except ImportError:
-        # Fallback: linear interpolation if scipy not available
-        print("  [WARN] scipy not found, using linear interpolation")
-        p_fine = np.interp(t_fine, times, positions)
-
-    return [(round(float(t), 4), round(float(p), 4)) for t, p in zip(t_fine, p_fine)]
-
 # ==================== RUN ====================
-# Smooth the coarse waypoints into fine 50ms steps
-FINE_WAYPOINTS = smooth_waypoints(WAYPOINTS, update_hz=20)
-print(f"Smoothed: {len(WAYPOINTS)} waypoints → {len(FINE_WAYPOINTS)} sub-steps")
-
 try:
-    run_trajectory(FINE_WAYPOINTS)
+    run_trajectory(WAYPOINTS)
 except KeyboardInterrupt:
     print("\nInterrupted!")
     tmc.tmc_mc.set_vactual_dur(0)
