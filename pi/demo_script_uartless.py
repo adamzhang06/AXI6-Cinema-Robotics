@@ -17,21 +17,32 @@ def execute_move(tmc, theta, duration, n):
     duration: time in seconds
     n:        2+ (2 = sharp, 1000 = smooth triangle)
     """
+    import time
 
-    steps = theta * STEPS_PER_REV / 360 
+    # Convert to integer steps FIRST, then derive speed/accel from actual steps
+    steps = round(theta * STEPS_PER_REV / 360)
 
-    v_avg = steps / duration
+    v_avg = abs(steps) / duration
     v_max = v_avg * (n / (n - 1))
     a_max = (v_max / duration) * n
 
-    print(f"  θ={theta}° → {steps} steps | speed={v_max:.2f} | accel={a_max:.2f} | time={duration}s | n={n}")
+    # Round to nearest int (not truncate) to minimize timing error
+    v_max_int = max(round(v_max), 1)
+    a_max_int = max(round(a_max), 1)
 
-    # The library accepts floats for these properties
-    tmc.acceleration_fullstep = a_max
-    tmc.max_speed_fullstep = v_max
-    
-    # run_to_position_steps expects raw microstep pulses
-    tmc.run_to_position_steps(steps, MovementAbsRel.ABSOLUTE)
+    # Expected timing breakdown
+    t_accel = v_max / a_max  # time to ramp up
+    t_cruise = duration - 2 * t_accel  # time at constant speed
+    print(f"  θ={theta}° → {steps} steps | speed={v_max_int} | accel={a_max_int} | n={n}")
+    print(f"  profile: {t_accel:.2f}s ramp + {max(t_cruise, 0):.2f}s cruise + {t_accel:.2f}s ramp = {duration}s")
+
+    tmc.acceleration_fullstep = a_max_int
+    tmc.max_speed_fullstep = v_max_int
+
+    t_start = time.time()
+    tmc.run_to_position_steps(steps, MovementAbsRel.RELATIVE)
+    actual = time.time() - t_start
+    print(f"  actual time: {actual:.2f}s (expected {duration}s, diff={actual-duration:+.2f}s)")
 
 def main():
     print("---")
