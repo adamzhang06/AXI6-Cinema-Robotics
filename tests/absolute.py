@@ -34,8 +34,8 @@ WAYPOINTS = [
     # (time_s, position_deg)
     (0,    0),      # Start at 0°
     (3,    90),     # Reach 90° at t=3s
-    (13,    270),    # Reach 270° at t=8s
-    (16,   360),      # Return to 0° at t=13s
+    (4,    270),    # Reach 270° at t=8s
+    (7,   360),      # Return to 0° at t=13s
 ]
 
 def deg_to_steps(deg):
