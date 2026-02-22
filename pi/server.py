@@ -14,7 +14,9 @@ import struct
 import time
 import threading
 import sys
-sys.path.insert(0, "/home/pi/AXI6")   # adjust to your Pi path
+import os
+# Dynamically add the parent directory (project root) to python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.motor.axis import Axis
 from core.motor.differential import DifferentialDrive
