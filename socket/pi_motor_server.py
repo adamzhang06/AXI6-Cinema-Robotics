@@ -7,6 +7,7 @@ from tmc_driver import Tmc2209, Loglevel, MovementAbsRel, TmcEnableControlPin, T
 # --- NETWORK SETUP ---
 UDP_IP = "0.0.0.0" 
 UDP_PORT = 5005
+BEACON_PORT = 5006
 
 class MotorState:
     def __init__(self):
@@ -45,6 +46,20 @@ def udp_listener():
             pass 
         except Exception:
             pass
+
+# --- BEACON BROADCASTER (auto-discovery) ---
+def beacon_broadcaster():
+    """Broadcasts a discovery beacon so the Mac can find this Pi automatically."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    print(f"[BEACON] Broadcasting on port {BEACON_PORT}...")
+    while state.running:
+        try:
+            beacon = json.dumps({"service": "axi6_motor_server", "port": UDP_PORT}).encode('utf-8')
+            sock.sendto(beacon, ('<broadcast>', BEACON_PORT))
+        except Exception:
+            pass
+        time.sleep(2)
 
 # --- 2. MOTOR CONTROL THREAD (Reverted to Step Chunks) ---
 def motor_loop():
@@ -89,6 +104,9 @@ def motor_loop():
 if __name__ == "__main__":
     net_thread = threading.Thread(target=udp_listener, daemon=True)
     net_thread.start()
+
+    beacon_thread = threading.Thread(target=beacon_broadcaster, daemon=True)
+    beacon_thread.start()
     
     try:
         motor_loop()

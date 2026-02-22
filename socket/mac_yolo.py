@@ -8,9 +8,37 @@ import json
 import numpy as np
 from ultralytics import YOLO
 
-# --- NETWORK SETUP ---
-PI_IP = "100.69.176.89"  
+# --- NETWORK SETUP (auto-discovery) ---
+BEACON_PORT = 5006
 PI_PORT = 5005
+
+def discover_pi(timeout=10):
+    """Listen for the Pi's beacon broadcast to auto-discover its IP."""
+    print(f"[NETWORK] Searching for Pi motor server...")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(('', BEACON_PORT))
+    sock.settimeout(timeout)
+    try:
+        data, addr = sock.recvfrom(1024)
+        msg = json.loads(data.decode('utf-8'))
+        if msg.get('service') == 'axi6_motor_server':
+            pi_ip = addr[0]
+            pi_port = msg.get('port', PI_PORT)
+            print(f"[NETWORK] ✅ Found Pi at {pi_ip}:{pi_port}")
+            sock.close()
+            return pi_ip, pi_port
+    except socket.timeout:
+        print(f"[NETWORK] ❌ No Pi found after {timeout}s.")
+        manual_ip = input("Enter Pi IP manually (or 'q' to quit): ").strip()
+        sock.close()
+        if manual_ip.lower() == 'q':
+            exit(0)
+        return manual_ip, PI_PORT
+    sock.close()
+    return None, PI_PORT
+
+PI_IP, PI_PORT = discover_pi()
 udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # --- CONFIGURABLE BASE SETTINGS ---
