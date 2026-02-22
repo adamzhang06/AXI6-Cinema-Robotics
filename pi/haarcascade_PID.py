@@ -142,6 +142,10 @@ def vision_loop():
                 state.ghost_cx = smooth_cx
                 state.target_visible = True
 
+                # Draw face box and tracking dot
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                cv2.circle(frame, (int(state.ghost_cx), y + (h // 2)), 6, (0, 0, 255), -1)
+
                 if frame_count % 30 == 0:
                     offset = int(smooth_cx - CENTER_X)
                     print(f"👤 FACE | cx: {int(smooth_cx)} | offset: {offset:+d}px | box: {w}x{h}")
@@ -152,8 +156,16 @@ def vision_loop():
                 if frame_count % 60 == 0:
                     print("👻 NO FACE | Waiting for detection...")
 
+            # Draw deadzone lines
+            cv2.line(frame, (CENTER_X - DEADZONE, 0), (CENTER_X - DEADZONE, HEIGHT), (0, 255, 255), 1)
+            cv2.line(frame, (CENTER_X + DEADZONE, 0), (CENTER_X + DEADZONE, HEIGHT), (0, 255, 255), 1)
+
+            # Show video feed
+            cv2.imshow('AXI6 Haar Cascade', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
             frame_count += 1
-            time.sleep(0.01)  # ~100Hz vision loop
     except KeyboardInterrupt:
         pass
     finally:
