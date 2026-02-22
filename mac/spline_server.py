@@ -72,8 +72,8 @@ def discover_pi(timeout=10):
 # -----------------------------------------------------------------------
 # 2. Send Trajectory to Pi via TCP
 # -----------------------------------------------------------------------
-def send_trajectory_to_pi(trajectory):
-    """Connects to the Pi and sends the trajectory as length-prefixed JSON."""
+def send_trajectory_to_pi(trajectory_dict):
+    """Connects to the Pi and sends the trajectory dict as length-prefixed JSON."""
     global pi_ip, pi_port
 
     # Try discovery if we haven't found the Pi yet
@@ -87,24 +87,14 @@ def send_trajectory_to_pi(trajectory):
     sock.settimeout(10)
     sock.connect((pi_ip, pi_port))
 
-    # The UI currently only generates one spline (pan). 
-    # For now, we will just send it as BOTH pan and tilt so the differential 
-    # drive has both inputs (tilt = 0 offset if we want, but copying it proves both motors run)
-    
-    # Create flat zero-tilt for now to test pure Pan motion
-    tilt_trajectory = [[pt[0], 0] for pt in trajectory]
-    
-    payload_dict = {
-        "pan": trajectory,
-        "tilt": tilt_trajectory
-    }
-
     # Encode and send length-prefixed payload
-    payload = json.dumps(payload_dict).encode('utf-8')
+    payload = json.dumps(trajectory_dict).encode('utf-8')
     header = struct.pack('>I', len(payload))
     sock.sendall(header + payload)
 
-    print(f"[NET] Sent {len(trajectory)} pan points & {len(tilt_trajectory)} tilt points ({len(payload)} bytes) to Pi.")
+    pan_len = len(trajectory_dict.get('pan', []))
+    tilt_len = len(trajectory_dict.get('tilt', []))
+    print(f"[NET] Sent {pan_len} pan points & {tilt_len} tilt points ({len(payload)} bytes) to Pi.")
 
     # Wait for ACK
     ack_data = sock.recv(4096)
@@ -128,20 +118,22 @@ class SplineHTTPHandler(SimpleHTTPRequestHandler):
         if self.path == '/trajectory':
             content_length = int(self.headers['Content-Length'])
             body = self.rfile.read(content_length)
-            trajectory = json.loads(body.decode('utf-8'))
-
-            print(f"[HTTP] Received {len(trajectory)} points from browser.")
+            trajectory_dict = json.loads(body.decode('utf-8'))
+            
+            pan_len = len(trajectory_dict.get('pan', []))
+            tilt_len = len(trajectory_dict.get('tilt', []))
+            print(f"[HTTP] Received {pan_len} pan / {tilt_len} tilt pts from browser.")
 
             # Forward to Pi
             try:
-                ack = send_trajectory_to_pi(trajectory)
+                ack = send_trajectory_to_pi(trajectory_dict)
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({
                     "status": "ok",
-                    "points": len(trajectory),
+                    "points": pan_len + tilt_len,
                     "message": f"Sent to Pi at {pi_ip}"
                 }).encode())
             except Exception as e:
