@@ -22,7 +22,7 @@ def execute_move(tmc, theta, duration, easing):
 
     # Calculate speed and acceleration
     max_speed = abs(steps) / duration
-    accel = (max_speed) / (2 * duration * (easing / 100))
+    accel = (max_speed) / (duration * (easing / 100))
 
     # Clamp to integers (driver needs ints)
     max_speed = max(int(max_speed), 1)
