@@ -15,7 +15,7 @@ print("---")
 # -----------------------------------------------------------------------
 # 1. Math Function: Generate Trapezoidal Profile
 # -----------------------------------------------------------------------
-def generate_trapezoidal_profile(final_angle_deg, total_time, dt=0.001, steps_per_rev=400):
+def generate_trapezoidal_profile(final_angle_deg, total_time, dt=0.001, steps_per_rev=400, phases=3.0):
     """
     Generates a list of (time, position) tuples forming a trapezoidal velocity profile.
     Uses the 1/3 rule: 1/3 time accelerating, 1/3 cruising, 1/3 decelerating.
@@ -24,7 +24,7 @@ def generate_trapezoidal_profile(final_angle_deg, total_time, dt=0.001, steps_pe
     total_steps = (final_angle_deg / 360.0) * steps_per_rev
     
     # Define phase durations
-    t_a = total_time / 3.0
+    t_a = total_time / phases
     t_cruise_end = total_time - t_a
     
     # Calculate Max Velocity and Acceleration
@@ -61,6 +61,7 @@ def generate_trapezoidal_profile(final_angle_deg, total_time, dt=0.001, steps_pe
 # -----------------------------------------------------------------------
 target_angle = float(input("Enter final angle in degrees (e.g., 360): "))
 target_time = float(input("Enter total move time in seconds (e.g., 3.0): "))
+target_phases = float(input("Enter total phases (2-1000): "))
 
 # Updated to use 1600 steps per revolution
 trajectory = generate_trapezoidal_profile(
@@ -68,6 +69,7 @@ trajectory = generate_trapezoidal_profile(
     total_time=target_time, 
     dt=0.001, 
     steps_per_rev=400
+    phases=target_phases;
 )
 
 # -----------------------------------------------------------------------
