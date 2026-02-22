@@ -7,94 +7,85 @@ from tmc_driver import (
     TmcMotionControlStepDir,
 )
 
-def rotate_degrees(tmc, degrees):
-    # Calculate steps based on 1600 steps per 360-degree revolution
-    steps = int((degrees / 360.0) * 1600)
+STEPS_PER_REV = 1600  # Steps for 360 degrees
+
+def execute_move(tmc, theta, duration, easing):
+    """
+    Calculate and execute a move with easing.
     
-    print(f"Executing: {degrees} degrees -> {steps} steps")
-    # Use RELATIVE movement so it rotates from its current position
+    theta:    angle in degrees (negative = reverse)
+    duration: time in seconds
+    easing:   1-100 (1 = sharp, 100 = smooth)
+    """
+    # Convert degrees to steps
+    steps = int(theta * STEPS_PER_REV / 360)
+
+    # Calculate speed and acceleration
+    max_speed = abs(steps) / duration
+    accel = (2 * max_speed) / (duration * (easing / 100))
+
+    # Clamp to integers (driver needs ints)
+    max_speed = max(int(max_speed), 1)
+    accel = max(int(accel), 1)
+
+    print(f"  θ={theta}° → {steps} steps | speed={max_speed} | accel={accel} | time={duration}s | ease={easing}%")
+
+    tmc.acceleration_fullstep = accel
+    tmc.max_speed_fullstep = max_speed
     tmc.run_to_position_steps(steps, MovementAbsRel.RELATIVE)
 
 def main():
     print("---")
-    print("AXI6 Interactive Degree Controller")
-    print("---")
+    print("AXI6 Motion Controller")
+    print("Input: time (s), angle (°), easing (1-100)")
+    print("---\n")
 
-    # -----------------------------------------------------------------------
-    # Initiate the Tmc2209 class
-    # (Using the pins from your successful test: EN=21, STEP=16, DIR=20)
-    # -----------------------------------------------------------------------
     tmc = Tmc2209(
         TmcEnableControlPin(21),
         TmcMotionControlStepDir(16, 20),
-        loglevel=Loglevel.INFO, # Set to INFO so it doesn't spam the terminal with debug text
+        loglevel=Loglevel.INFO,
     )
-    
-    # Get acceleration and speed from user (Enter for defaults)
-    accel_input = input("Acceleration [2000]: ").strip()
-    accel = int(accel_input) if accel_input else 2000
 
-    speed_input = input("Max Speed [1000]: ").strip()
-    max_speed = int(speed_input) if speed_input else 1000
-
-    tmc.acceleration_fullstep = accel
-    tmc.max_speed_fullstep = max_speed
-
-    # Activate the motor current output
     tmc.set_motor_enabled(True)
-    print(f"\nMotor Enabled. Speed: {max_speed} | Accel: {accel}")
-    print("Commands: degrees (-360 to 360), 'a' = set accel, 's' = set speed, 'q' = quit\n")
+    print("Motor Enabled.\n")
 
     try:
-        # -----------------------------------------------------------------------
-        # Terminal Input Loop
-        # -----------------------------------------------------------------------
         while True:
-            user_input = input(f"[spd={max_speed} acc={accel}] Enter degrees or command: ").strip()
+            user_input = input("Time(s), Angle(°), Ease(1-100)  [or 'q' to quit]: ").strip()
 
             if user_input.lower() == 'q':
                 break
-            elif user_input.lower() == 's':
-                val = input("  New max speed: ").strip()
-                try:
-                    max_speed = int(val)
-                    tmc.max_speed_fullstep = max_speed
-                    print(f"  Speed set to {max_speed}")
-                except ValueError:
-                    print("  Invalid number.")
-                continue
-            elif user_input.lower() == 'a':
-                val = input("  New acceleration: ").strip()
-                try:
-                    accel = int(val)
-                    tmc.acceleration_fullstep = accel
-                    print(f"  Accel set to {accel}")
-                except ValueError:
-                    print("  Invalid number.")
-                continue
 
             try:
-                degrees = float(user_input)
-                if -360 <= degrees <= 360:
-                    rotate_degrees(tmc, degrees)
-                else:
-                    print("Please enter a value between -360 and 360.")
+                parts = user_input.replace(',', ' ').split()
+                if len(parts) != 3:
+                    print("  Enter 3 values: time angle easing  (e.g. '2 90 50')")
+                    continue
+
+                duration = float(parts[0])
+                theta = float(parts[1])
+                easing = float(parts[2])
+
+                if duration <= 0:
+                    print("  Time must be > 0")
+                    continue
+                if easing < 1 or easing > 100:
+                    print("  Easing must be 1-100")
+                    continue
+
+                execute_move(tmc, theta, duration, easing)
+
             except ValueError:
-                print("Invalid input. Enter degrees, 'a', 's', or 'q'.")
+                print("  Invalid input. Example: 2 90 50  (2s, 90°, 50% easing)")
 
     except KeyboardInterrupt:
-        print("\nTest interrupted by user.")
-        
+        print("\nInterrupted.")
+
     finally:
-        # -----------------------------------------------------------------------
-        # Safe Shutdown Sequence
-        # -----------------------------------------------------------------------
         print("\nDeactivating motor...")
         tmc.set_motor_enabled(False)
         del tmc
-        print("---")
-        print("SCRIPT FINISHED")
-        print("---")
+        print("---\nSCRIPT FINISHED\n---")
 
 if __name__ == "__main__":
     main()
