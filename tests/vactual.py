@@ -133,7 +133,7 @@ tmc.set_motor_enabled(True)
 # use acceleration (velocity ramping) with VActual
 # does not work with revolutions as parameter
 # -----------------------------------------------------------------------
-tmc.tmc_mc.set_vactual_rpm(-120, duration=10, acceleration=500)
+tmc.tmc_mc.set_vactual_rpm(640 * 60 / 1600, duration=5, acceleration=256)
 
 
 # -----------------------------------------------------------------------
