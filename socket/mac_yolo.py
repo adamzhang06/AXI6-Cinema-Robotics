@@ -29,12 +29,9 @@ def discover_pi(timeout=10):
             sock.close()
             return pi_ip, pi_port
     except socket.timeout:
-        print(f"[NETWORK] ❌ No Pi found after {timeout}s.")
-        manual_ip = input("Enter Pi IP manually (or 'q' to quit): ").strip()
+        print(f"[NETWORK] ❌ No Pi found after {timeout}s. Using fallback IP.")
         sock.close()
-        if manual_ip.lower() == 'q':
-            exit(0)
-        return manual_ip, PI_PORT
+        return "10.186.143.105", PI_PORT
     sock.close()
     return None, PI_PORT
 

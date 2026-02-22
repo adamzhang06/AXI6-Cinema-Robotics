@@ -35,7 +35,7 @@ from ultralytics import YOLO
 BEACON_PORT = 5006
 PI_PORT = 5005
 
-def discover_pi(timeout=10):
+def discover_pi(timeout=2):
     """Listen for the Pi's beacon broadcast to auto-discover its IP."""
     print(f"[NETWORK] Searching for Pi motor server...")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -52,12 +52,9 @@ def discover_pi(timeout=10):
             sock.close()
             return pi_ip, pi_port
     except socket.timeout:
-        print(f"[NETWORK] ❌ No Pi found after {timeout}s.")
-        manual_ip = input("Enter Pi IP manually (or 'q' to quit): ").strip()
+        print(f"[NETWORK] ❌ No Pi found after {timeout}s. Using fallback IP.")
         sock.close()
-        if manual_ip.lower() == 'q':
-            exit(0)
-        return manual_ip, PI_PORT
+        return "10.186.143.105", PI_PORT
     sock.close()
     return None, PI_PORT
 
@@ -83,6 +80,7 @@ FRAME_TIME = 1.0 / TARGET_FPS
 GRACE_PERIOD_SEC = 1.0          # Hold position this long before Kalman recovery
 MAX_RECOVERY_FRAMES = 60        # ~1s at 60Hz — how long Kalman coasts
 RECOVERY_SEARCH_RADIUS = 300    # px — how far from prediction to re-acquire
+KALMAN_REWIND_FRAMES = 15       # How many frames back to rewind on recovery start
 
 # ===================== CLASSES =====================
 
@@ -186,8 +184,6 @@ tilt_pid  = StepperPID(kp=0.075, ki=0.01, kd=3.5,  max_speed=300, accel=400)
 
 pan_smoother = MotorOutputSmoother(alpha=0.12, max_delta=10)
 
-smoothers = {k: EMASmoother(SMOOTHING_FACTOR) for k in ["left", "right", "top", "bottom"]}
-
 # ===================== KALMAN FILTER =====================
 
 kalman = cv2.KalmanFilter(4, 2)
@@ -199,8 +195,8 @@ kalman.transitionMatrix = np.array([
     [0, 1, 0, 1],
     [0, 0, 1, 0],
     [0, 0, 0, 1]], np.float32)
-kalman.processNoiseCov = np.eye(4, dtype=np.float32) * 5e-3
-kalman.measurementNoiseCov = np.eye(2, dtype=np.float32) * 5e-1
+kalman.processNoiseCov = np.eye(4, dtype=np.float32) * 1e-3      # Low: trust motion model less (less overshoot)
+kalman.measurementNoiseCov = np.eye(2, dtype=np.float32) * 1e-1   # Low: trust measurements more (follow detections tightly)
 
 kalman_enabled = True
 kalman_initialized = False
@@ -213,16 +209,65 @@ def reset_kalman(cx, cy):
     kalman.errorCovPost = np.eye(4, dtype=np.float32)
     kalman_initialized = True
 
-def kalman_predict():
-    """Get Kalman's current predicted position."""
-    prediction = kalman.predict()
-    return float(prediction[0].item()), float(prediction[1].item())
+# Per-frame prediction cache (prevent double-advancing state)
+_kf_frame_id = -1
+_kf_cached_prediction = (0.0, 0.0)
+
+def kalman_predict_once(frame_id):
+    """Call predict() only once per frame. Subsequent calls return cached result.
+    OpenCV's predict() advances the state, so calling it twice = double-step overshoot."""
+    global _kf_frame_id, _kf_cached_prediction
+    if frame_id != _kf_frame_id:
+        prediction = kalman.predict()
+        _kf_cached_prediction = (float(prediction[0].item()), float(prediction[1].item()))
+        _kf_frame_id = frame_id
+    return _kf_cached_prediction
 
 def kalman_correct(cx, cy):
     """Feed a measurement to the Kalman filter."""
     if not kalman_initialized:
         reset_kalman(cx, cy)
     kalman.correct(np.array([[np.float32(cx)], [np.float32(cy)]]))
+
+# Ring buffer: stores recent (cx, cy, time) for rewinding on target loss
+measurement_history = []
+MAX_HISTORY = KALMAN_REWIND_FRAMES + 5  # keep a few extra
+
+def record_measurement(cx, cy, t):
+    """Add a measurement to the ring buffer."""
+    measurement_history.append((cx, cy, t))
+    if len(measurement_history) > MAX_HISTORY:
+        measurement_history.pop(0)
+
+def rewind_kalman_to_stable():
+    """Reset Kalman from a position ~KALMAN_REWIND_FRAMES ago with averaged velocity.
+    This avoids the YOLO 'shrinking box' problem where the last few frames
+    before target loss have unreliable positions."""
+    global kalman_initialized
+    if len(measurement_history) < 3:
+        return  # Not enough data
+
+    # Pick the rewind point (oldest available, up to KALMAN_REWIND_FRAMES back)
+    rewind_idx = max(0, len(measurement_history) - KALMAN_REWIND_FRAMES)
+    stable_cx, stable_cy, stable_t = measurement_history[rewind_idx]
+
+    # Average velocity from the stable window (rewind point to ~5 frames after)
+    end_idx = min(rewind_idx + 5, len(measurement_history) - 1)
+    if end_idx > rewind_idx:
+        end_cx, end_cy, end_t = measurement_history[end_idx]
+        dt = max(end_t - stable_t, 0.01)
+        vx = (end_cx - stable_cx) / dt * FRAME_TIME  # velocity per frame
+        vy = (end_cy - stable_cy) / dt * FRAME_TIME
+    else:
+        vx, vy = 0.0, 0.0
+
+    # Reset Kalman with the stable position + estimated velocity
+    kalman.statePre  = np.array([[stable_cx], [stable_cy], [vx], [vy]], np.float32)
+    kalman.statePost = np.array([[stable_cx], [stable_cy], [vx], [vy]], np.float32)
+    kalman.errorCovPre  = np.eye(4, dtype=np.float32)
+    kalman.errorCovPost = np.eye(4, dtype=np.float32)
+    kalman_initialized = True
+    print(f"[KALMAN] Rewound to stable pos ({int(stable_cx)}, {int(stable_cy)}) vel=({vx:.1f}, {vy:.1f})")
 
 
 # ===================== DRAWING HELPERS =====================
@@ -265,6 +310,11 @@ track_state = TrackState.LOST
 grace_start_time = 0.0
 recovery_frame_count = 0
 
+# Group-specific: handles individual person loss within a group
+group_adjust_active = False       # True when someone dropped from group
+group_adjust_start_time = 0.0
+GROUP_ADJUST_GRACE_SEC = 1.0      # How long to wait for them to come back
+
 # ===================== CAMERA SETUP =====================
 
 cap = cv2.VideoCapture(0)
@@ -280,6 +330,8 @@ print("Press 'K' to toggle Kalman, 'Q' to quit.\n")
 
 # ===================== MAIN LOOP =====================
 
+frame_id = 0
+
 while cap.isOpened() and system_state["running"]:
     loop_start = time.time()
     success, frame = cap.read()
@@ -287,6 +339,7 @@ while cap.isOpened() and system_state["running"]:
         break
     frame = cv2.flip(frame, 1)
     current_time = time.time()
+    frame_id += 1
 
     if frame_for_yolo is None:
         frame_for_yolo = frame.copy()
@@ -326,7 +379,7 @@ while cap.isOpened() and system_state["running"]:
 
             # During recovery, use Kalman prediction as the search center
             if track_state == TrackState.RECOVERY and kalman_enabled and kalman_initialized:
-                search_cx, search_cy = kalman_predict()
+                search_cx, search_cy = kalman_predict_once(frame_id)
 
             min_dist = float('inf')
             for box in current_boxes:
@@ -347,8 +400,20 @@ while cap.isOpened() and system_state["running"]:
     elif tracking_mode == "group":
         if current_num_people > 0:
             if current_num_people >= expected_num_people:
+                # Everyone (or more) is here — normal tracking
+                if current_num_people > expected_num_people:
+                    print(f"[GROUP] New person joined ({expected_num_people} → {current_num_people})")
                 expected_num_people = current_num_people
-            target_found = True
+                group_adjust_active = False
+                target_found = True
+            else:
+                # Fewer people than expected — someone dropped
+                target_found = True  # Still track what we have
+                if not group_adjust_active:
+                    # Start adjustment grace period
+                    group_adjust_active = True
+                    group_adjust_start_time = current_time
+                    print(f"[GROUP] Person lost ({current_num_people}/{expected_num_people}) — holding for {GROUP_ADJUST_GRACE_SEC}s")
 
     # ===================================================
     #  PHASE 2: STATE MACHINE
@@ -356,6 +421,21 @@ while cap.isOpened() and system_state["running"]:
     # ===================================================
     mode_text = ""
     raw_left = raw_top = raw_right = raw_bottom = 0
+
+    # Handle group adjustment grace (separate from full target loss)
+    group_kalman_frozen = False
+    if tracking_mode == "group" and group_adjust_active and target_found:
+        time_since_adjust = current_time - group_adjust_start_time
+        if time_since_adjust < GROUP_ADJUST_GRACE_SEC:
+            # Still in grace — freeze Kalman corrections, hold last known position
+            group_kalman_frozen = True
+            remaining = GROUP_ADJUST_GRACE_SEC - time_since_adjust
+            mode_text = f"Group Tracking ({current_num_people}/{expected_num_people}) HOLD ({remaining:.1f}s)"
+        else:
+            # Grace expired — the person didn't come back, accept new count
+            print(f"[GROUP] Adjusted: {expected_num_people} → {current_num_people} people")
+            expected_num_people = current_num_people
+            group_adjust_active = False
 
     if target_found:
         # --- TARGET FOUND: back to tracking ---
@@ -368,17 +448,19 @@ while cap.isOpened() and system_state["running"]:
             mode_text = f"Single Tracking (Person {target_person_index + 1}/{current_num_people})"
             raw_left, raw_top, raw_right, raw_bottom = best_box[0], best_box[1], best_box[2], best_box[3]
         elif tracking_mode == "group":
-            mode_text = f"Group Tracking ({current_num_people} people)"
+            if not mode_text:  # Not already set by group adjust logic above
+                mode_text = f"Group Tracking ({current_num_people} people)"
             raw_left   = min(b[0] for b in current_boxes)
             raw_right  = max(b[2] for b in current_boxes)
             raw_top    = min(b[1] for b in current_boxes)
             raw_bottom = max(b[3] for b in current_boxes)
 
-        # Feed Kalman with the actual measurement
+        # Feed Kalman with the actual measurement (unless frozen during group grace)
         meas_cx = (raw_left + raw_right) / 2
         meas_cy = (raw_top + raw_bottom) / 2
-        if kalman_enabled:
+        if kalman_enabled and not group_kalman_frozen:
             kalman_correct(meas_cx, meas_cy)
+            record_measurement(meas_cx, meas_cy, current_time)
 
     else:
         # --- TARGET NOT FOUND ---
@@ -397,7 +479,9 @@ while cap.isOpened() and system_state["running"]:
                 if kalman_enabled and kalman_initialized:
                     track_state = TrackState.RECOVERY
                     recovery_frame_count = 0
-                    pred_cx, pred_cy = kalman_predict()
+                    # REWIND: reset Kalman to stable position from ~15 frames ago
+                    rewind_kalman_to_stable()
+                    pred_cx, pred_cy = kalman_predict_once(frame_id)
                     print(f"[RECOVERY] Grace expired — Kalman searching near ({int(pred_cx)}, {int(pred_cy)})...")
                 else:
                     track_state = TrackState.LOST
@@ -406,7 +490,7 @@ while cap.isOpened() and system_state["running"]:
             recovery_frame_count += 1
             if recovery_frame_count <= MAX_RECOVERY_FRAMES:
                 # Kalman coasts using velocity model
-                pred_cx, pred_cy = kalman_predict()
+                pred_cx, pred_cy = kalman_predict_once(frame_id)
                 last_target_cx, last_target_cy = pred_cx, pred_cy
 
                 # Draw ghost crosshair at Kalman prediction
@@ -455,86 +539,72 @@ while cap.isOpened() and system_state["running"]:
         pan_smoother.reset()
 
     elif track_state in (TrackState.TRACKING, TrackState.GRACE):
-        # Update EMA smoothers only when we have fresh detections
-        if track_state == TrackState.TRACKING:
-            smoothers["left"].update(raw_left)
-            smoothers["right"].update(raw_right)
-            smoothers["top"].update(raw_top)
-            smoothers["bottom"].update(raw_bottom)
-        # During grace, keep using last smoothed values (don't update)
-
-        s_left  = smoothers["left"].value
-        s_right = smoothers["right"].value
-        s_top   = smoothers["top"].value
-        s_bottom = smoothers["bottom"].value
-
-        if s_left is None:
-            # Smoothers not initialized yet
-            pass
+        # Get tracking position from Kalman or raw measurement
+        if kalman_enabled and kalman_initialized:
+            target_cx, target_cy = kalman_predict_once(frame_id)
         else:
-            target_cx = (s_left + s_right) / 2
-            target_cy = (s_top + s_bottom) / 2
-            offset_x = target_cx - frame_cx
-            offset_y = target_cy - frame_cy
+            target_cx = (raw_left + raw_right) / 2
+            target_cy = (raw_top + raw_bottom) / 2
 
-            # --- SLIDE ---
-            if not system_state["slide"]["locked"]:
-                if not system_state["slide"]["recentering"] and abs(offset_x) > base_dz_slide:
-                    system_state["slide"]["recentering"] = True
-                active_dz_s = int(base_dz_slide * RECENTER_RATIO) if system_state["slide"]["recentering"] else base_dz_slide
-                if system_state["slide"]["recentering"] and abs(offset_x) <= active_dz_s:
-                    system_state["slide"]["recentering"] = False
-                    active_dz_s = base_dz_slide
+        offset_x = target_cx - frame_cx
+        offset_y = target_cy - frame_cy
 
-                if abs(offset_x) > active_dz_s:
-                    system_state["slide"]["speed"], system_state["slide"]["dir"] = slide_pid.compute(offset_x)
-                else:
-                    system_state["slide"]["speed"], system_state["slide"]["dir"] = 0, 0
-                    slide_pid.reset()
+        # --- SLIDE ---
+        if not system_state["slide"]["locked"]:
+            if not system_state["slide"]["recentering"] and abs(offset_x) > base_dz_slide:
+                system_state["slide"]["recentering"] = True
+            active_dz_s = int(base_dz_slide * RECENTER_RATIO) if system_state["slide"]["recentering"] else base_dz_slide
+            if system_state["slide"]["recentering"] and abs(offset_x) <= active_dz_s:
+                system_state["slide"]["recentering"] = False
+                active_dz_s = base_dz_slide
 
-            # --- PAN (orbit-style: PID → rate-limited smoother) ---
-            if not system_state["pan"]["locked"]:
-                if not system_state["pan"]["recentering"] and abs(offset_x) > base_dz_pan:
-                    system_state["pan"]["recentering"] = True
-                active_dz_p = int(base_dz_pan * RECENTER_RATIO) if system_state["pan"]["recentering"] else base_dz_pan
-                if system_state["pan"]["recentering"] and abs(offset_x) <= active_dz_p:
-                    system_state["pan"]["recentering"] = False
-                    active_dz_p = base_dz_pan
+            if abs(offset_x) > active_dz_s:
+                system_state["slide"]["speed"], system_state["slide"]["dir"] = slide_pid.compute(offset_x)
+            else:
+                system_state["slide"]["speed"], system_state["slide"]["dir"] = 0, 0
+                slide_pid.reset()
 
-                if abs(offset_x) > active_dz_p:
-                    raw_speed, raw_dir = pan_pid.compute(offset_x)
-                    system_state["pan"]["speed"] = pan_smoother.update(raw_speed)
-                    system_state["pan"]["dir"] = raw_dir
-                else:
-                    system_state["pan"]["speed"] = pan_smoother.update(0)
-                    system_state["pan"]["dir"] = 0
-                    pan_pid.reset()
+        # --- PAN (orbit-style: PID → rate-limited smoother) ---
+        if not system_state["pan"]["locked"]:
+            if not system_state["pan"]["recentering"] and abs(offset_x) > base_dz_pan:
+                system_state["pan"]["recentering"] = True
+            active_dz_p = int(base_dz_pan * RECENTER_RATIO) if system_state["pan"]["recentering"] else base_dz_pan
+            if system_state["pan"]["recentering"] and abs(offset_x) <= active_dz_p:
+                system_state["pan"]["recentering"] = False
+                active_dz_p = base_dz_pan
 
-            # --- TILT ---
-            if not system_state["tilt"]["locked"]:
-                if not system_state["tilt"]["recentering"] and abs(offset_y) > base_dz_tilt:
-                    system_state["tilt"]["recentering"] = True
-                active_dz_t = int(base_dz_tilt * RECENTER_RATIO) if system_state["tilt"]["recentering"] else base_dz_tilt
-                if system_state["tilt"]["recentering"] and abs(offset_y) <= active_dz_t:
-                    system_state["tilt"]["recentering"] = False
-                    active_dz_t = base_dz_tilt
+            if abs(offset_x) > active_dz_p:
+                raw_speed, raw_dir = pan_pid.compute(offset_x)
+                system_state["pan"]["speed"] = pan_smoother.update(raw_speed)
+                system_state["pan"]["dir"] = raw_dir
+            else:
+                system_state["pan"]["speed"] = pan_smoother.update(0)
+                system_state["pan"]["dir"] = 0
+                pan_pid.reset()
 
-                if abs(offset_y) > active_dz_t:
-                    system_state["tilt"]["speed"], system_state["tilt"]["dir"] = tilt_pid.compute(offset_y)
-                else:
-                    system_state["tilt"]["speed"], system_state["tilt"]["dir"] = 0, 0
-                    tilt_pid.reset()
+        # --- TILT ---
+        if not system_state["tilt"]["locked"]:
+            if not system_state["tilt"]["recentering"] and abs(offset_y) > base_dz_tilt:
+                system_state["tilt"]["recentering"] = True
+            active_dz_t = int(base_dz_tilt * RECENTER_RATIO) if system_state["tilt"]["recentering"] else base_dz_tilt
+            if system_state["tilt"]["recentering"] and abs(offset_y) <= active_dz_t:
+                system_state["tilt"]["recentering"] = False
+                active_dz_t = base_dz_tilt
 
-            # Draw tracking visuals
-            actively_sending = any(not system_state[a]["locked"] and system_state[a]["speed"] > 0 for a in ["slide", "pan", "tilt"])
-            target_color = ACTIVE_COLOR if actively_sending else STANDBY_COLOR
+            if abs(offset_y) > active_dz_t:
+                system_state["tilt"]["speed"], system_state["tilt"]["dir"] = tilt_pid.compute(offset_y)
+            else:
+                system_state["tilt"]["speed"], system_state["tilt"]["dir"] = 0, 0
+                tilt_pid.reset()
 
-            if tracking_mode == "single":
-                cv2.rectangle(frame, (int(s_left), int(s_top)), (int(s_right), int(s_bottom)), target_color, 2)
-                draw_crosshair(frame, target_cx, target_cy, target_color, size=8, thickness=2)
-            elif tracking_mode == "group":
-                cv2.circle(frame, (int(target_cx), int(target_cy)), 25, target_color, 3)
-                cv2.circle(frame, (int(target_cx), int(target_cy)), 4, target_color, -1)
+        # Draw tracking visuals
+        actively_sending = any(not system_state[a]["locked"] and system_state[a]["speed"] > 0 for a in ["slide", "pan", "tilt"])
+        target_color = ACTIVE_COLOR if actively_sending else STANDBY_COLOR
+
+        # Draw Kalman-filtered crosshair (what the PID actually sees)
+        draw_crosshair(frame, target_cx, target_cy, target_color, size=12, thickness=2)
+        if tracking_mode == "group":
+            cv2.circle(frame, (int(target_cx), int(target_cy)), 25, target_color, 3)
 
     # --- RECOVERY state motor handling is done in Phase 2 above ---
 
