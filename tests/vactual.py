@@ -134,6 +134,7 @@ tmc.set_motor_enabled(True)
 # does not work with revolutions as parameter
 # -----------------------------------------------------------------------
 tmc.tmc_mc.set_vactual_rpm(640 * 60 / 1600, duration=15, acceleration=480)
+tmc.tmc_mc.set_vactual_rpm(0, acceleration=480)  # Ramp back down to 0
 # tmc.tmc_mc.set_vactual_rpm(640 * 60 / 1600, duration=2.5, acceleration=-256)
 
 
