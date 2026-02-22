@@ -68,8 +68,8 @@ trajectory = generate_trapezoidal_profile(
     final_angle_deg=target_angle, 
     total_time=target_time, 
     dt=0.001, 
-    steps_per_rev=400
-    phases=target_phases;
+    steps_per_rev=400,
+    phases=target_phases
 )
 
 # -----------------------------------------------------------------------
