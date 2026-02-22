@@ -9,6 +9,37 @@ from tmc_driver import (
 
 STEPS_PER_REV = 1600  # Steps for 360 degrees
 
+# Auto-calibrated at startup
+SPEED_CORRECTION = 1.0
+
+def calibrate_driver(tmc):
+    """Run a short test move to measure the driver's actual speed factor."""
+    import time
+    global SPEED_CORRECTION
+
+    test_steps = 200
+    test_speed = 200
+    test_accel = 10000  # High accel so move is nearly all cruise
+
+    tmc.acceleration_fullstep = test_accel
+    tmc.max_speed_fullstep = test_speed
+
+    print("[CALIBRATING] Running 200 steps at speed 200...")
+    t0 = time.time()
+    tmc.run_to_position_steps(test_steps, MovementAbsRel.RELATIVE)
+    actual_time = time.time() - t0
+
+    expected_time = test_steps / test_speed  # Should be 1.0s
+    SPEED_CORRECTION = actual_time / expected_time
+
+    print(f"[CALIBRATED] Expected {expected_time:.2f}s, actual {actual_time:.2f}s")
+    print(f"[CALIBRATED] Speed correction factor: {SPEED_CORRECTION:.3f}")
+    print(f"[CALIBRATING] Returning to start position...")
+
+    # Return to original position
+    tmc.run_to_position_steps(-test_steps, MovementAbsRel.RELATIVE)
+    print()
+
 def execute_move(tmc, theta, duration, n):
     """
     Calculate and execute a move.
@@ -26,18 +57,19 @@ def execute_move(tmc, theta, duration, n):
     v_max = v_avg * (n / (n - 1))
     a_max = (v_max / duration) * n
 
-    # Round to nearest int (not truncate) to minimize timing error
-    v_max_int = max(round(v_max), 1)
-    a_max_int = max(round(a_max), 1)
+    # Apply calibrated correction factor
+    v_max_hw = max(round(v_max * SPEED_CORRECTION), 1)
+    a_max_hw = max(round(a_max * SPEED_CORRECTION * SPEED_CORRECTION), 1)
+    # Note: accel is distance/time² so it gets correction² 
 
     # Expected timing breakdown
     t_accel = v_max / a_max  # time to ramp up
     t_cruise = duration - 2 * t_accel  # time at constant speed
-    print(f"  θ={theta}° → {steps} steps | speed={v_max_int} | accel={a_max_int} | n={n}")
+    print(f"  θ={theta}° → {steps} steps | speed={v_max_hw} | accel={a_max_hw} | n={n}")
     print(f"  profile: {t_accel:.2f}s ramp + {max(t_cruise, 0):.2f}s cruise + {t_accel:.2f}s ramp = {duration}s")
 
-    tmc.acceleration_fullstep = a_max_int
-    tmc.max_speed_fullstep = v_max_int
+    tmc.acceleration_fullstep = a_max_hw
+    tmc.max_speed_fullstep = v_max_hw
 
     t_start = time.time()
     tmc.run_to_position_steps(steps, MovementAbsRel.RELATIVE)
@@ -58,6 +90,9 @@ def main():
 
     tmc.set_motor_enabled(True)
     print("Motor Enabled.\n")
+
+    # Auto-calibrate: measure actual driver speed
+    calibrate_driver(tmc)
 
     try:
         while True:
