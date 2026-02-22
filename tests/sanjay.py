@@ -66,8 +66,8 @@ target_time = float(input("Enter total move time in seconds (e.g., 3.0): "))
 trajectory = generate_trapezoidal_profile(
     final_angle_deg=target_angle, 
     total_time=target_time, 
-    dt=0.05, 
-    steps_per_rev=1600 
+    dt=0.001, 
+    steps_per_rev=400
 )
 
 # -----------------------------------------------------------------------
