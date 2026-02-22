@@ -133,9 +133,22 @@ tmc.set_motor_enabled(True)
 # use acceleration (velocity ramping) with VActual
 # does not work with revolutions as parameter
 # -----------------------------------------------------------------------
-tmc.tmc_mc.set_vactual_rpm(640 * 60 / 1600, duration=15, acceleration=480)
-tmc.tmc_mc.set_vactual_rpm(0, acceleration=480)  # Ramp back down to 0
-# tmc.tmc_mc.set_vactual_rpm(640 * 60 / 1600, duration=2.5, acceleration=-256)
+# Ramp up + cruise
+target_vel = 640  # VACTUAL units
+accel = 480
+duration = 15
+ramp_time = target_vel / accel  # time to ramp
+
+tmc.tmc_mc.set_vactual_rpm(target_vel * 60 / 1600, duration=duration, acceleration=accel)
+
+# Manual ramp down (library doesn't auto-decelerate)
+ramp_steps = max(int(ramp_time * 100), 20)  # ~100Hz update rate
+for i in range(ramp_steps, -1, -1):
+    vel = int(target_vel * (i / ramp_steps))
+    tmc.tmc_mc.set_vactual_dur(vel)
+    time.sleep(ramp_time / ramp_steps)
+tmc.tmc_mc.set_vactual_dur(0)
+print("Ramp down complete.")
 
 
 # -----------------------------------------------------------------------
