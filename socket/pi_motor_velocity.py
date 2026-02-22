@@ -4,7 +4,7 @@ Motor Velocity Ramp Test (Socket Version)
 ==========================================
 Runs on the Mac — sends velocity ramp commands to the Pi via UDP.
 Uses the existing pi_motor_server.py on the Pi.
-Displays a live matplotlib graph of commanded speed over time.
+Terminal output only — no matplotlib needed.
 
 Usage:
   1. Start pi_motor_server.py on the Pi
@@ -23,10 +23,6 @@ Configurable:
 import socket
 import json
 import time
-import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-from collections import deque
 
 # ==================== NETWORK SETUP ====================
 BEACON_PORT = 5006
@@ -64,32 +60,7 @@ ACCEL       = 400        # Motor acceleration
 RAMP_RATE   = 10         # Speed increase per second
 MAX_SPEED   = 1000       # Safety cap
 DIRECTION   = 1          # 1 = forward, -1 = reverse
-SEND_HZ     = 100        # UDP send rate (100 packets/s is plenty)
-
-# ==================== LIVE GRAPH SETUP ====================
-plt.ion()
-fig, ax = plt.subplots(figsize=(10, 5))
-fig.patch.set_facecolor('#1a1a2e')
-ax.set_facecolor('#16213e')
-
-MAX_POINTS = 500
-times = deque(maxlen=MAX_POINTS)
-velocities = deque(maxlen=MAX_POINTS)
-
-line, = ax.plot([], [], color='#00ff88', linewidth=2, label='Commanded Speed')
-ax.set_xlabel('Time (s)', color='white', fontsize=12)
-ax.set_ylabel('Motor Speed (pan)', color='white', fontsize=12)
-ax.set_title(f'Motor Velocity Ramp — Pi @ {PI_IP}:{PI_PORT}', color='white', fontsize=14, fontweight='bold')
-ax.tick_params(colors='white')
-ax.spines['bottom'].set_color('#444')
-ax.spines['left'].set_color('#444')
-ax.spines['top'].set_visible(False)
-ax.spines['right'].set_visible(False)
-ax.legend(loc='upper left', facecolor='#16213e', edgecolor='#444', labelcolor='white')
-ax.grid(True, alpha=0.2, color='white')
-
-plt.tight_layout()
-plt.show(block=False)
+SEND_HZ     = 100        # UDP send rate
 
 # ==================== RAMP LOOP ====================
 print("\n" + "=" * 50)
@@ -103,8 +74,6 @@ print("=" * 50 + "\n")
 current_speed = 0.0
 start_time = time.time()
 loop_period = 1.0 / SEND_HZ
-last_graph_update = 0
-GRAPH_UPDATE_HZ = 30
 
 def send_command(speed, direction, accel):
     """Send a motor command to the Pi via UDP."""
@@ -129,20 +98,8 @@ try:
         # Send to Pi
         send_command(int_speed, STEP_SIZE * DIRECTION, ACCEL)
 
-        # Record data
-        times.append(elapsed)
-        velocities.append(int_speed)
-
-        # Update graph at 30fps
-        if elapsed - last_graph_update > 1.0 / GRAPH_UPDATE_HZ:
-            last_graph_update = elapsed
-            line.set_data(list(times), list(velocities))
-            ax.set_xlim(max(0, elapsed - 20), elapsed + 1)
-            ax.set_ylim(0, max(int_speed + 50, 100))
-            fig.canvas.draw_idle()
-            fig.canvas.flush_events()
-
-            print(f"\r  ⏱ {elapsed:6.1f}s | 🏎 Speed: {int_speed:4d} | Dir: {DIRECTION:+d}", end="", flush=True)
+        # Print status
+        print(f"\r  ⏱ {elapsed:6.1f}s | 🏎 Speed: {int_speed:4d} | Dir: {DIRECTION:+d}", end="", flush=True)
 
         # Timing
         sleep_time = loop_period - (time.time() - loop_start)
@@ -153,8 +110,5 @@ except KeyboardInterrupt:
     print(f"\n\n[STOP] Final speed: {int(current_speed)} at {time.time() - start_time:.1f}s")
 
 finally:
-    # Send stop command
     send_command(0, 0, ACCEL)
     print("[SHUTDOWN] Stop command sent to Pi.")
-    plt.ioff()
-    plt.show()  # Keep graph visible
