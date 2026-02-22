@@ -15,24 +15,37 @@ def execute_move(tmc, theta, duration, easing):
     
     theta:    angle in degrees (negative = reverse)
     duration: time in seconds
-    easing:   1 - 100 (1 = sharp, 100 = smooth)
+    easing:   1 - 100 (1 = sharp, 100 = smooth triangle)
     """
-    # Convert degrees to steps
-    steps = int(theta * STEPS_PER_REV / 360)
+    # Convert degrees to steps (keep signed for direction)
+    target_steps = int(theta * STEPS_PER_REV / 360)
+    abs_steps = abs(target_steps)
+    
+    # Catch zero-movement to prevent division by zero errors
+    if abs_steps == 0:
+        return
 
-    # Calculate speed and acceleration
-    max_speed = (abs(steps) / duration) * 2 * (easing / 100)
-    accel = (2 * max_speed) / (duration * (easing / 100))
+    # 1. Calculate Acceleration Time (t_a)
+    # Easing (1-100) mapped to a max of 50% of the total duration
+    t_a = (easing * duration) / 200.0
 
-    # Clamp to integers (driver needs ints)
-    max_speed = max(int(max_speed), 1)
-    accel = max(int(accel), 1)
+    # 2. Calculate Maximum Speed (steps / second)
+    # v_max = total_distance / (total_time - acceleration_time)
+    max_speed = abs_steps / (duration - t_a)
 
-    print(f"  θ={theta}° → {steps} steps | speed={max_speed} | accel={accel} | time={duration}s | ease={easing}%")
+    # 3. Calculate Acceleration (steps / second^2)
+    # a_max = v_max / acceleration_time
+    accel = max_speed / t_a
 
-    tmc.acceleration_fullstep = accel
-    tmc.max_speed_fullstep = max_speed
-    tmc.run_to_position_steps(steps, MovementAbsRel.RELATIVE)
+    # Clamp to integers (TMC driver requires ints)
+    max_speed_int = max(int(max_speed), 1)
+    accel_int = max(int(accel), 1)
+
+    print(f"  θ={theta}° → {target_steps} steps | speed={max_speed_int} | accel={accel_int} | time={duration}s | ease={easing}%")
+
+    tmc.acceleration_fullstep = accel_int
+    tmc.max_speed_fullstep = max_speed_int
+    tmc.run_to_position_steps(target_steps, MovementAbsRel.RELATIVE)
 
 def main():
     print("---")
