@@ -22,14 +22,14 @@ def execute_move(tmc, theta, duration, easing):
     v_max = (steps / duration) * (easing / (easing - 1))
     a_max = (v_max / duration) * easing
 
-    # print(f"  θ={theta}° → {target_steps} steps | speed={max_speed_full:.2f} | accel={accel_full:.2f} | time={duration}s | ease={easing}%")
+    print(f"  θ={theta}° → {steps} steps | speed={v_max:.2f} | accel={a_max:.2f} | time={duration}s | ease={easing}%")
 
     # The library accepts floats for these properties
     tmc.acceleration_fullstep = a_max
     tmc.max_speed_fullstep = v_max
     
     # run_to_position_steps expects raw microstep pulses
-    tmc.run_to_position_steps(target_steps, MovementAbsRel.RELATIVE)
+    tmc.run_to_position_steps(steps, MovementAbsRel.RELATIVE)
 
 def main():
     print("---")
