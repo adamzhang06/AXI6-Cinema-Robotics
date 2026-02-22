@@ -214,9 +214,7 @@ print("[MOTOR] Enabled\n")
 def run_trajectory(waypoints):
     """Execute the waypoint trajectory using VACTUAL velocity control."""
     
-    print("  Time  |  Target  |  Velocity  |  VACTUAL")
-    print("  ------|----------|------------|--------")
-    
+    print(f"  Running {len(waypoints)} waypoints...")
     t_start = time.time()
     
     for i in range(len(waypoints) - 1):
@@ -232,31 +230,32 @@ def run_trajectory(waypoints):
         steps_per_sec = delta_steps / dt
         vactual = steps_to_vactual(steps_per_sec)
         
-        print(f"  {t_now:5.1f}s | {pos_now:6.1f}° → {pos_next:6.1f}° | {steps_per_sec:+8.1f} sps | {vactual:+6d}")
+        # Write VACTUAL directly — bypass any library delays
+        tmc.tmc_mc.set_vactual(vactual)
         
-        # Set velocity
-        tmc.tmc_mc.set_vactual_dur(vactual)
+        # Status every ~1 second
+        if i % 20 == 0:
+            print(f"\r  t={t_now:.1f}s pos={pos_now:.0f}° vel={vactual:+d}", end="", flush=True)
         
-        # Wait until next waypoint time
+        # Precision sleep until next waypoint
         target_time = t_start + t_next
-        remaining = target_time - time.time()
-        if remaining > 0:
-            time.sleep(remaining)
+        while time.time() < target_time:
+            pass  # Busy-wait for precision (sleep is too coarse at 50ms intervals)
     
     # Stop
-    tmc.tmc_mc.set_vactual_dur(0)
+    tmc.tmc_mc.set_vactual(0)
     
     actual_total = time.time() - t_start
-    print(f"\n  Done! Total time: {actual_total:.2f}s (expected {waypoints[-1][0]}s)")
+    print(f"\n  Done! {actual_total:.2f}s (expected {waypoints[-1][0]}s)")
 
 # ==================== RUN ====================
 try:
     run_trajectory(WAYPOINTS)
 except KeyboardInterrupt:
     print("\nInterrupted!")
-    tmc.tmc_mc.set_vactual_dur(0)
+    tmc.tmc_mc.set_vactual(0)
 finally:
-    tmc.tmc_mc.set_vactual_dur(0)
+    tmc.tmc_mc.set_vactual(0)
     tmc.set_motor_enabled(False)
     del tmc
     print("[SHUTDOWN] Motor disabled.")
