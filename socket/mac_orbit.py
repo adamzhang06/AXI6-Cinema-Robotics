@@ -23,7 +23,8 @@ import json
 #    P         - Toggle pan axis lock
 #    T         - Toggle tilt axis lock
 #    SPACE     - Emergency stop (lock all axes)
-#    +/-       - Adjust deadzone size
+#    I/O       - Shrink/Grow deadzone scale (like mac_yolo.py)
+#    +/-       - Fine adjust deadzone size
 #    1/2/3     - Switch tracker: 1=KCF, 2=CSRT, 3=MOSSE
 #    Q         - Quit (sends stop command to Pi)
 # ============================================================
@@ -43,10 +44,11 @@ DISPLAY_SCALE_Y = CAPTURE_H / DISPLAY_H
 TARGET_FPS = 60
 FRAME_TIME = 1.0 / TARGET_FPS
 
-# --- TIGHT DEADZONE FOR ORBIT SHOTS ---
-DEADZONE_X = 30
-DEADZONE_Y = 20
+# --- DEADZONE FOR ORBIT SHOTS ---
+BASE_DZ_X = 60
+BASE_DZ_Y = 40
 INNER_DZ_RATIO = 0.5
+dz_scale = 1.0              # Adjustable with I/O keys
 
 # --- TRACKING AT HALF RES ---
 TRACK_SCALE = 0.5
@@ -59,22 +61,28 @@ MIN_BOX_SIZE = 30
 MAX_BOX_RATIO = 0.8
 
 # --- PID TUNING FOR SMOOTH ORBIT COMPENSATION ---
-PAN_KP = 0.6
-PAN_KI = 0.015
-PAN_KD = 0.25
+# Lowered for slower, smoother motion on real hardware.
+PAN_KP = 0.3
+PAN_KI = 0.01
+PAN_KD = 0.15
 PAN_ACCEL = 2000
 
-TILT_KP = 0.6
-TILT_KI = 0.015
-TILT_KD = 0.25
+TILT_KP = 0.3
+TILT_KI = 0.01
+TILT_KD = 0.15
 TILT_ACCEL = 400
 
 SLIDE_ACCEL = 400
 
 # --- MOTOR OUTPUT SMOOTHING ---
-MAX_SPEED_CHANGE = 15
-MAX_MOTOR_SPEED = 300
-MOTOR_SMOOTHING = 0.15
+MAX_SPEED_CHANGE = 10
+MAX_MOTOR_SPEED = 200
+MOTOR_SMOOTHING = 0.12
+
+# --- AUTO-RECOVERY ---
+# When the tracker loses the target, use Kalman prediction to re-init.
+MAX_RECOVERY_ATTEMPTS = 30  # Try for ~0.5s at 60Hz before giving up
+RECOVERY_SEARCH_SCALE = 1.3 # Search a slightly larger area than original box
 
 # --- SIMULATED SLIDE DRIFT (for testing without hardware slide) ---
 SIM_SLIDE_DISTANCE = 500
@@ -200,6 +208,11 @@ original_box_h = 0
 
 pan_recentering = False
 tilt_recentering = False
+
+# Auto-recovery state
+recovery_active = False
+recovery_attempts = 0
+last_kalman_cx, last_kalman_cy = 0.0, 0.0
 
 def create_tracker(tracker_type):
     if tracker_type == "CSRT":
@@ -336,8 +349,8 @@ slide_sim = TrapezoidalSlideSimulator(SIM_SLIDE_DISTANCE, SIM_SLIDE_MAX_SPEED, S
 tracker_name = TRACKER_TYPES[current_tracker_idx]
 print("\n--- AXI6 ORBIT CONTROLLER (Socket) ---")
 print(f"Tracker: {tracker_name} | Target Pi: {PI_IP}:{PI_PORT}")
-print(f"Deadzone: {DEADZONE_X}x{DEADZONE_Y}px | Loop: {TARGET_FPS}Hz")
-print("Press 'R' to select target, 'Q' to quit.\n")
+print(f"Deadzone: {BASE_DZ_X}x{BASE_DZ_Y}px | Loop: {TARGET_FPS}Hz")
+print("Press 'R' to select target, 'I/O' to adjust deadzone, 'Q' to quit.\n")
 
 motor_pan_speed, motor_pan_dir = 0, 0
 motor_tilt_speed, motor_tilt_dir = 0, 0
@@ -358,6 +371,10 @@ while cap.isOpened() and system_state["running"]:
     frame_counter += 1
 
     system_engaged = not all(system_state[a]["locked"] for a in ["slide", "pan", "tilt"])
+
+    # Calculate active deadzones from base + scale
+    DEADZONE_X = int(BASE_DZ_X * dz_scale)
+    DEADZONE_Y = int(BASE_DZ_Y * dz_scale)
 
     # --- SIMULATED SLIDE DRIFT ---
     sim_offset = slide_sim.update() if slide_sim.active else 0
@@ -417,6 +434,7 @@ while cap.isOpened() and system_state["running"]:
     raw_cx, raw_cy = 0.0, 0.0
     track_ok = False
     target_lost = True
+    in_recovery = False
 
     if tracking_active and tracker is not None:
         t0 = time.time()
@@ -546,18 +564,73 @@ while cap.isOpened() and system_state["running"]:
                                (bar_x2 + bar_w + 8, bar_y_base), 0.65, tilt_bar_col, 2)
 
         else:
-            tracking_active = False
-            tracker = None
-            initial_template = None
-            motor_pan_speed = motor_tilt_speed = 0
-            motor_pan_dir = motor_tilt_dir = 0
-            system_state["pan"]["speed"] = system_state["pan"]["dir"] = 0
-            system_state["tilt"]["speed"] = system_state["tilt"]["dir"] = 0
-            pan_smoother.reset(); tilt_smoother.reset()
-            print("[TRACKER] Target lost!")
+            # --- KALMAN AUTO-RECOVERY ---
+            # Instead of giving up, use Kalman's predicted position
+            # to re-initialize the tracker with the same-sized box.
+            if not recovery_active:
+                recovery_active = True
+                recovery_attempts = 0
+                # Get Kalman's predicted position (ghost box)
+                prediction = kalman.predict()
+                last_kalman_cx = float(prediction[0].item())
+                last_kalman_cy = float(prediction[1].item())
+                print(f"[RECOVERY] Target lost — attempting re-acquisition at ({int(last_kalman_cx)}, {int(last_kalman_cy)})...")
 
-    # If no tracking active, ensure motors are stopped
-    if not tracking_active or target_lost:
+            if recovery_active and recovery_attempts < MAX_RECOVERY_ATTEMPTS:
+                recovery_attempts += 1
+                in_recovery = True
+
+                # Use Kalman prediction (it continues to coast via velocity)
+                prediction = kalman.predict()
+                pred_cx = float(prediction[0].item())
+                pred_cy = float(prediction[1].item())
+
+                # Re-init tracker at predicted position with original box size
+                rw = int(original_box_w * current_scale * RECOVERY_SEARCH_SCALE)
+                rh = int(original_box_h * current_scale * RECOVERY_SEARCH_SCALE)
+                rx = max(0, min(int(pred_cx - rw / 2), frame_w - rw))
+                ry = max(0, min(int(pred_cy - rh / 2), frame_h - rh))
+
+                if rw > MIN_BOX_SIZE and rh > MIN_BOX_SIZE:
+                    tracker_name = TRACKER_TYPES[current_tracker_idx]
+                    tracker = create_tracker(tracker_name)
+                    tracker.init(frame_small, (int(rx * TRACK_SCALE), int(ry * TRACK_SCALE),
+                                               int(rw * TRACK_SCALE), int(rh * TRACK_SCALE)))
+                    track_box = (rx, ry, rw, rh)
+
+                # Draw ghost box at Kalman prediction
+                ghost_color = (0, 0, 255)  # Red ghost
+                gx, gy = int(pred_cx - rw / 2), int(pred_cy - rh / 2)
+                cv2.rectangle(frame, (gx, gy), (gx + rw, gy + rh), ghost_color, 1)
+                draw_crosshair(frame, pred_cx, pred_cy, ghost_color, size=12, thickness=2)
+                draw_outlined_text(frame, f"RECOVERING ({recovery_attempts}/{MAX_RECOVERY_ATTEMPTS})",
+                                   (gx, gy - 15), 0.6, ghost_color, 2)
+
+                # Ramp motors down smoothly during recovery
+                motor_pan_speed = pan_smoother.update(0)
+                motor_tilt_speed = tilt_smoother.update(0)
+                system_state["pan"]["speed"] = motor_pan_speed
+                system_state["tilt"]["speed"] = motor_tilt_speed
+            else:
+                # Recovery exhausted — fully stop
+                recovery_active = False
+                tracking_active = False
+                tracker = None
+                motor_pan_speed = motor_tilt_speed = 0
+                motor_pan_dir = motor_tilt_dir = 0
+                system_state["pan"]["speed"] = system_state["pan"]["dir"] = 0
+                system_state["tilt"]["speed"] = system_state["tilt"]["dir"] = 0
+                pan_smoother.reset(); tilt_smoother.reset()
+                print("[RECOVERY] Failed — target fully lost.")
+
+    # If tracker re-acquired during recovery, clear recovery state
+    if track_ok and recovery_active:
+        recovery_active = False
+        recovery_attempts = 0
+        print(f"[RECOVERY] Re-acquired target!")
+
+    # If no tracking active and not in recovery, ensure motors are stopped
+    if (not tracking_active or target_lost) and not in_recovery:
         for axis in ["pan", "tilt"]:
             system_state[axis]["speed"] = 0
             system_state[axis]["dir"] = 0
@@ -624,6 +697,9 @@ while cap.isOpened() and system_state["running"]:
     if tracking_active and track_ok:
         mode_text = "ORBIT TRACKING"
         mode_color = HUD_GREEN
+    elif recovery_active:
+        mode_text = f"RECOVERING ({recovery_attempts}/{MAX_RECOVERY_ATTEMPTS})"
+        mode_color = HUD_WARN
     elif not tracking_active:
         mode_text = "IDLE  [R] SELECT TARGET"
         mode_color = HUD_ACCENT
@@ -661,7 +737,7 @@ while cap.isOpened() and system_state["running"]:
     slide_status = f"SIM: {slide_sim.phase.upper()}" if slide_sim.active else "SIM: OFF"
     draw_hud_panel(frame, 0, frame_h - 55, frame_w, 55, alpha=0.55)
     draw_outlined_text(frame,
-        "R:Select  C:Cancel  S/P/T:Lock  SPACE:Stop  G:SimSlide  K:Kalman  1/2/3:Tracker  Q:Quit",
+        "R:Select  C:Cancel  S/P/T:Lock  SPACE:Stop  I/O:DZ  G:Sim  K:Kalman  1/2/3:Tracker  Q:Quit",
         (20, frame_h - 20), 0.5, HUD_COLOR, 2)
 
     # --- DISPLAY ---
@@ -676,10 +752,12 @@ while cap.isOpened() and system_state["running"]:
     elif key == ord('r'):
         selecting_roi, drawing, roi_ready = True, False, False
         tracking_active, tracker, initial_template = False, None, None
+        recovery_active = False
         current_scale = 1.0
         slide_sim.reset()
     elif key == ord('c'):
         tracking_active, tracker, initial_template = False, None, None
+        recovery_active = False
         current_scale = 1.0
         pan_smoother.reset(); tilt_smoother.reset()
         slide_sim.reset()
@@ -719,12 +797,18 @@ while cap.isOpened() and system_state["running"]:
         else:
             slide_sim.start()
             print("[SIM] Trapezoidal slide drift started!")
+    elif key == ord('i'):
+        dz_scale = max(0.5, dz_scale - 0.25)
+        print(f"[DZ] Scale: {dz_scale}x → {int(BASE_DZ_X * dz_scale)}x{int(BASE_DZ_Y * dz_scale)}px")
+    elif key == ord('o'):
+        dz_scale = min(4.0, dz_scale + 0.25)
+        print(f"[DZ] Scale: {dz_scale}x → {int(BASE_DZ_X * dz_scale)}x{int(BASE_DZ_Y * dz_scale)}px")
     elif key == ord('=') or key == ord('+'):
-        DEADZONE_X = min(DEADZONE_X + 5, frame_w // 2)
-        DEADZONE_Y = min(DEADZONE_Y + 5, frame_h // 2)
+        BASE_DZ_X = min(BASE_DZ_X + 5, frame_w // 2)
+        BASE_DZ_Y = min(BASE_DZ_Y + 5, frame_h // 2)
     elif key == ord('-'):
-        DEADZONE_X = max(DEADZONE_X - 5, 5)
-        DEADZONE_Y = max(DEADZONE_Y - 5, 5)
+        BASE_DZ_X = max(BASE_DZ_X - 5, 5)
+        BASE_DZ_Y = max(BASE_DZ_Y - 5, 5)
     elif key in [ord('1'), ord('2'), ord('3')]:
         new_idx = key - ord('1')
         if new_idx != current_tracker_idx:

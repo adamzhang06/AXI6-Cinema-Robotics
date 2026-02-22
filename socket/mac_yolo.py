@@ -8,6 +8,10 @@ import json
 import numpy as np
 from ultralytics import YOLO
 
+# --- AUTO-RECOVERY CONFIG ---
+MAX_RECOVERY_ATTEMPTS = 30
+RECOVERY_SEARCH_RADIUS = 250
+
 # --- NETWORK SETUP ---
 PI_IP = "100.69.176.89"  
 PI_PORT = 5005
@@ -23,6 +27,10 @@ RECENTER_RATIO = 0.5
 SMOOTHING_FACTOR = 0.25 
 MAX_TRACK_DIST = 250 
 GLOBAL_SPEED_SCALE = 1.0
+
+# --- LOOP TIMING ---
+TARGET_FPS = 60
+FRAME_TIME = 1.0 / TARGET_FPS
 
 # --- 1. SHARED SYSTEM STATE ---
 system_state = {
@@ -60,7 +68,6 @@ def vision_worker():
 
 # --- 3. PID & EMA CLASSES ---
 class StepperPID:
-    # ADDED 'accel' PARAMETER HERE
     def __init__(self, kp, ki, kd, max_speed, accel):
         self.kp = kp
         self.ki = ki
@@ -77,7 +84,7 @@ class StepperPID:
         self.last_time = current_time
         
         self.integral += error * dt
-        self.integral = max(min(self.integral, 1000), -1000) 
+        self.integral = max(min(self.integral, 2000), -2000)
         
         derivative = (error - self.prev_error) / dt
         self.prev_error = error
@@ -86,8 +93,6 @@ class StepperPID:
         scaled_velocity = abs(raw_velocity) * GLOBAL_SPEED_SCALE
         
         speed = min(int(scaled_velocity), self.max_speed)
-        
-        # --- REVERTED THIS LINE: Back to 10-step chunks ---
         direction = 1 if error > 0 else -1
         
         return speed, direction
@@ -95,6 +100,7 @@ class StepperPID:
     def reset(self):
         self.integral = 0
         self.prev_error = 0
+        self.last_time = time.time()
 
 class EMASmoother:
     def __init__(self, alpha):
@@ -104,17 +110,55 @@ class EMASmoother:
         else: self.value += self.alpha * (new_value - self.value)
         return self.value
 
+class MotorOutputSmoother:
+    """Rate-limited EMA smoother for motor speed output (from orbit controller)."""
+    def __init__(self, alpha, max_delta):
+        self.alpha = alpha
+        self.max_delta = max_delta
+        self.value = 0.0
+    def update(self, target):
+        delta = target - self.value
+        delta = max(-self.max_delta, min(self.max_delta, delta))
+        self.value += delta
+        self.value += self.alpha * (target - self.value)
+        return max(0, int(self.value))
+    def reset(self):
+        self.value = 0.0
+
 # --- 4. START BACKGROUND THREADS ---
 vision_thread = threading.Thread(target=vision_worker, daemon=True)
 vision_thread.start()
 
 # --- 5. SETUP UTILS & PID ---
-# Dropped max_speed to 300 to stop it from violently whipping around
 slide_pid = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=400)
-pan_pid   = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=2000) # 200 accel makes it start slow
+pan_pid   = StepperPID(kp=0.3, ki=0.01, kd=0.15, max_speed=200, accel=2000)  # Orbit-style P-dominant tuning
 tilt_pid  = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=300, accel=400)
 
+pan_smoother = MotorOutputSmoother(alpha=0.12, max_delta=10)  # Rate-limited motor output
+
 smoothers = {k: EMASmoother(SMOOTHING_FACTOR) for k in ["left", "right", "top", "bottom"]}
+
+# --- KALMAN FILTER (from orbit controller — tuned for steady drift prediction) ---
+kalman = cv2.KalmanFilter(4, 2)
+kalman.measurementMatrix = np.array([
+    [1, 0, 0, 0],
+    [0, 1, 0, 0]], np.float32)
+kalman.transitionMatrix = np.array([
+    [1, 0, 1, 0],
+    [0, 1, 0, 1],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]], np.float32)
+kalman.processNoiseCov = np.eye(4, dtype=np.float32) * 5e-3
+kalman.measurementNoiseCov = np.eye(2, dtype=np.float32) * 5e-1
+kalman_initialized = False
+
+def reset_kalman(cx, cy):
+    global kalman_initialized
+    kalman.statePre = np.array([[cx], [cy], [0], [0]], np.float32)
+    kalman.statePost = np.array([[cx], [cy], [0], [0]], np.float32)
+    kalman.errorCovPre = np.eye(4, dtype=np.float32)
+    kalman.errorCovPost = np.eye(4, dtype=np.float32)
+    kalman_initialized = True
 
 def draw_outlined_text(img, text, pos, font_scale, color, thickness):
     cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness + 3)
@@ -132,10 +176,11 @@ STANDBY_COLOR = (255, 200, 50)
 RECENTER_COLOR = (0, 0, 255) 
 
 expected_num_people = 0
-is_frozen = False
-freeze_start_time = 0
-flicker_grace_sec = 0.5 
 target_lost = True
+
+# Auto-recovery state (replaces flicker grace)
+recovery_active = False
+recovery_attempts = 0
 
 force_target_switch = True
 last_target_cx, last_target_cy = 0, 0
@@ -150,6 +195,7 @@ cap.set(cv2.CAP_PROP_EXPOSURE, 300)
 print("\n--- AXI6 MAC VISION SYSTEM ONLINE ---")
 
 while cap.isOpened() and system_state["running"]:
+    loop_start = time.time()
     success, frame = cap.read()
     if not success: break
     frame = cv2.flip(frame, 1)
@@ -199,15 +245,35 @@ while cap.isOpened() and system_state["running"]:
                 last_target_cx = (best_box[0] + best_box[2]) / 2
                 last_target_cy = (best_box[1] + best_box[3]) / 2
                 target_person_index = next(i for i, b in enumerate(current_boxes) if np.array_equal(b, best_box))
+        # Also check recovery — if in recovery and YOLO finds a person near Kalman prediction, re-acquire
+        elif recovery_active and current_num_people > 0 and kalman_initialized:
+            prediction = kalman.predict()
+            pred_cx = float(prediction[0].item())
+            pred_cy = float(prediction[1].item())
+            min_dist_to_pred = float('inf')
+            for box in current_boxes:
+                cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+                dist = math.hypot(cx - pred_cx, cy - pred_cy)
+                if dist < min_dist_to_pred:
+                    min_dist_to_pred = dist
+                    best_box = box
+            if best_box is not None and min_dist_to_pred < RECOVERY_SEARCH_RADIUS:
+                target_found_this_frame = True
+                last_target_cx = (best_box[0] + best_box[2]) / 2
+                last_target_cy = (best_box[1] + best_box[3]) / 2
+                target_person_index = next(i for i, b in enumerate(current_boxes) if np.array_equal(b, best_box))
+                recovery_active = False
+                recovery_attempts = 0
+                print(f"[RECOVERY] Re-acquired target!")
 
     elif tracking_mode == "group":
         if current_num_people >= expected_num_people and current_num_people > 0:
             expected_num_people = current_num_people
             target_found_this_frame = True
 
-    # --- THE STATE MACHINE ---
+    # --- THE STATE MACHINE (Kalman auto-recovery replaces flicker grace) ---
     if target_found_this_frame:
-        is_frozen, target_lost = False, False
+        target_lost = False
         if tracking_mode == "single":
             mode_text = f"Single Tracking (Person {target_person_index + 1}/{current_num_people})"
             raw_left, raw_top, raw_right, raw_bottom = best_box[0], best_box[1], best_box[2], best_box[3]
@@ -217,21 +283,48 @@ while cap.isOpened() and system_state["running"]:
             raw_right = max(b[2] for b in current_boxes)
             raw_top = min(b[1] for b in current_boxes)
             raw_bottom = max(b[3] for b in current_boxes)
+        
+        # Update Kalman with measurement
+        target_cx_raw = (raw_left + raw_right) / 2
+        target_cy_raw = (raw_top + raw_bottom) / 2
+        if not kalman_initialized:
+            reset_kalman(target_cx_raw, target_cy_raw)
+        kalman.correct(np.array([[np.float32(target_cx_raw)], [np.float32(target_cy_raw)]]))
     else:
-        if not is_frozen and not target_lost:
-            is_frozen, freeze_start_time = True, current_time
+        # --- KALMAN AUTO-RECOVERY (replaces flicker grace) ---
+        if not recovery_active and not target_lost and kalman_initialized:
+            recovery_active = True
+            recovery_attempts = 0
+            prediction = kalman.predict()
+            pred_cx = float(prediction[0].item())
+            pred_cy = float(prediction[1].item())
+            print(f"[RECOVERY] Target lost — searching near ({int(pred_cx)}, {int(pred_cy)})...")
 
-        if is_frozen:
-            time_left = max(0.0, flicker_grace_sec - (current_time - freeze_start_time))
-            if time_left > 0:
-                mode_text = f"LOSS GRACE HOLD ({time_left:.1f}s)"
-            else:
-                is_frozen = False
-                if tracking_mode == "single" or current_num_people == 0:
-                    target_lost = True
-                elif tracking_mode == "group":
-                    expected_num_people = current_num_people
-                    target_lost = False 
+        if recovery_active and recovery_attempts < MAX_RECOVERY_ATTEMPTS:
+            recovery_attempts += 1
+            # Kalman coasts forward using velocity model
+            prediction = kalman.predict()
+            pred_cx = float(prediction[0].item())
+            pred_cy = float(prediction[1].item())
+            last_target_cx, last_target_cy = pred_cx, pred_cy
+
+            # Draw ghost crosshair at predicted position
+            ghost_color = (0, 0, 255)
+            draw_crosshair(frame, pred_cx, pred_cy, ghost_color, size=20, thickness=3)
+            cv2.circle(frame, (int(pred_cx), int(pred_cy)), RECOVERY_SEARCH_RADIUS, ghost_color, 1)
+            mode_text = f"RECOVERING ({recovery_attempts}/{MAX_RECOVERY_ATTEMPTS})"
+
+            # Ramp motors down smoothly during recovery
+            if not system_state["pan"]["locked"]:
+                system_state["pan"]["speed"] = pan_smoother.update(0)
+            for axis in ["slide", "tilt"]:
+                if not system_state[axis]["locked"]:
+                    system_state[axis]["speed"] = 0
+        elif recovery_active:
+            recovery_active = False
+            target_lost = True
+            pan_smoother.reset()
+            print("[RECOVERY] Failed — target fully lost.")
 
     for box in current_boxes:
         x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
@@ -282,7 +375,7 @@ while cap.isOpened() and system_state["running"]:
                 system_state["slide"]["speed"], system_state["slide"]["dir"] = 0, 0
                 slide_pid.reset()
 
-        # --- PAN ---
+        # --- PAN (with orbit-style rate-limited output) ---
         if not system_state["pan"]["locked"]:
             if not system_state["pan"]["recentering"] and abs(offset_x) > base_dz_pan:
                 system_state["pan"]["recentering"] = True
@@ -292,9 +385,12 @@ while cap.isOpened() and system_state["running"]:
                 active_dz_p = base_dz_pan
 
             if abs(offset_x) > active_dz_p:
-                system_state["pan"]["speed"], system_state["pan"]["dir"] = pan_pid.compute(offset_x)
+                raw_speed, raw_dir = pan_pid.compute(offset_x)
+                system_state["pan"]["speed"] = pan_smoother.update(raw_speed)
+                system_state["pan"]["dir"] = raw_dir
             else: 
-                system_state["pan"]["speed"], system_state["pan"]["dir"] = 0, 0
+                system_state["pan"]["speed"] = pan_smoother.update(0)
+                system_state["pan"]["dir"] = 0
                 pan_pid.reset()
 
         # --- TILT ---
@@ -354,7 +450,7 @@ while cap.isOpened() and system_state["running"]:
         cv2.line(frame, (xl, yb), (xr, yb), c_tilt, 2)
 
     # --- DRAW HUD ---
-    mode_color = (0, 165, 255) if is_frozen else (0, 0, 255) if target_lost else (255, 255, 0)
+    mode_color = (0, 165, 255) if recovery_active else (0, 0, 255) if target_lost else (255, 255, 0)
     draw_outlined_text(frame, f"MODE: {mode_text}", (10, 35), 0.8, mode_color, 2)
     
     for i, axis in enumerate(["slide", "pan", "tilt"]):
@@ -391,9 +487,13 @@ while cap.isOpened() and system_state["running"]:
         tracking_mode, expected_num_people, target_lost = "group", 0, False
     
     elif key == ord('i'): dz_scale = max(1.0, dz_scale - 0.5) 
-    elif key == ord('o'): dz_scale = min(8.0, dz_scale + 0.5) 
-    elif key == ord('['): flicker_grace_sec = max(0.0, flicker_grace_sec - 0.1) 
-    elif key == ord(']'): flicker_grace_sec = min(5.0, flicker_grace_sec + 0.1) 
+    elif key == ord('o'): dz_scale = min(8.0, dz_scale + 0.5)
+
+    # --- FRAME RATE CAP (60Hz) ---
+    elapsed = time.time() - loop_start
+    sleep_time = FRAME_TIME - elapsed
+    if sleep_time > 0:
+        time.sleep(sleep_time)
 
 # Safe Shutdown
 stop_payload = json.dumps({"slide": {"speed":0,"dir":0,"accel":0}, "pan": {"speed":0,"dir":0,"accel":0}, "tilt": {"speed":0,"dir":0,"accel":0}})

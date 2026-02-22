@@ -65,8 +65,8 @@ def motor_loop():
             p_dir   = state.axes["pan"]["dir"]
             p_accel = state.axes["pan"]["accel"]
             
-            # 1. Update Acceleration dynamically if it changed
-            if pan_motor.acceleration_fullstep != p_accel:
+            # 1. Update Acceleration dynamically if it changed (guard against 0)
+            if p_accel > 0 and pan_motor.acceleration_fullstep != p_accel:
                 pan_motor.acceleration_fullstep = p_accel
             
             # 2. Update Speed
