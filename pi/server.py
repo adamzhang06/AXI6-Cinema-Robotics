@@ -4,6 +4,7 @@ pi/server.py
 Main server running on the Raspberry Pi.
 Receives pan/tilt spline trajectories from the Mac via socket, converts them into 
 differential step timings, and executes them using precision GPIO pulsing.
+Also receives live tracking commands via UDP for continuous velocity.
 
 Reference: legacy/socket/pi_spline_motor.py, legacy/tests/sanjay.py
 """
@@ -25,6 +26,7 @@ from core.motion.spline import SplineInterpolator
 HOST = "0.0.0.0"
 TCP_PORT = 5010
 BEACON_PORT = 5011
+UDP_TRACKING_PORT = 5005
 
 running = True
 
@@ -55,6 +57,43 @@ def beacon_broadcaster():
         except Exception:
             pass
         time.sleep(2)
+
+
+# ─ UDP Tracking Listener ──────────────────────────────────────────────────────
+def tracking_listener():
+    """Listens for continuous velocity commands from Mac tracking script."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((HOST, UDP_TRACKING_PORT))
+    sock.settimeout(1.0)
+    print(f"[TRACKING] Listening for live velocity on UDP port {UDP_TRACKING_PORT}...")
+
+    while running:
+        try:
+            data, addr = sock.recvfrom(1024)
+            payload = json.loads(data.decode('utf-8'))
+            
+            # Format from Mac yolo script:
+            # {"pan": {"speed": X, "dir": Y}, "tilt": {"speed": X, "dir": Y}}
+            
+            pan_speed = payload.get("pan", {}).get("speed", 0)
+            pan_dir = payload.get("pan", {}).get("dir", 0)
+            tilt_speed = payload.get("tilt", {}).get("speed", 0)
+            tilt_dir = payload.get("tilt", {}).get("dir", 0)
+            
+            # Convert direction dict into signed frequency (hz/steps per second)
+            # Assuming direction is >0 for forward, <0 for backward (dir is currently -10 or 10 in mac yolo.py)
+            pan_hz = pan_speed if pan_dir > 0 else -pan_speed if pan_dir < 0 else 0
+            tilt_hz = tilt_speed if tilt_dir > 0 else -tilt_speed if tilt_dir < 0 else 0
+            
+            # Set the velocity on the drive
+            drive.set_velocity(pan_hz, tilt_hz)
+            
+        except socket.timeout:
+            continue
+        except json.JSONDecodeError:
+            pass
+        except Exception as e:
+            print(f"[TRACKING-ERR] {e}")
 
 
 # ─ TCP Server Setup ───────────────────────────────────────────────────────────
@@ -172,6 +211,13 @@ def main():
     # Start beacon in background
     beacon_thread = threading.Thread(target=beacon_broadcaster, daemon=True)
     beacon_thread.start()
+    
+    # Start tracking listener in background
+    tracking_thread = threading.Thread(target=tracking_listener, daemon=True)
+    tracking_thread.start()
+
+    # Start the continuous drive mode in background for tracking
+    drive.start_continuous()
 
     # Start TCP server
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -198,6 +244,7 @@ def main():
                 conn.close()
 
                 # Calculate times and block to execute via precision GPIO
+                # This automatically pauses continuous tracking, then resumes after!
                 execute_trajectory(pan_spline, tilt_spline)
                 print("[SERVER] Ready for next trajectory.")
 

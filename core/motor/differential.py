@@ -6,6 +6,8 @@ Differential pan/tilt drive executor.
 Converts pan/tilt spline trajectories into absolute step arrays for both 
 co-axial motors, then executes them simultaneously in parallel threads
 using busy-wait precision.
+
+Also supports continuous velocity control for live tracking.
 """
 
 import time
@@ -31,6 +33,15 @@ class DifferentialDrive:
         self.axis_a = axis_a
         self.axis_b = axis_b
 
+        # State for continuous velocity mode
+        self._continuous_running = False
+        self._velocity_a_hz = 0.0
+        self._velocity_b_hz = 0.0
+        self._continuous_thread_a = None
+        self._continuous_thread_b = None
+
+    # --- Precise Spline Execution (Blocking) ---
+
     def execute_dual_timing(
         self, 
         motor_a_forward: bool,
@@ -41,7 +52,14 @@ class DifferentialDrive:
         """
         Fires exact calculated step schedules for both motors in parallel.
         Uses busy-wait loops to ensure jitter-free timing.
+        
+        If continuous mode is running, it must be paused/stopped before calling this.
         """
+        # Temporarily halt continuous velocity if it's running
+        was_continuous = self._continuous_running
+        if was_continuous:
+            self.stop_continuous()
+
         self.axis_a.set_direction(motor_a_forward)
         self.axis_b.set_direction(motor_b_forward)
         
@@ -72,8 +90,98 @@ class DifferentialDrive:
         actual = time.time() - start_time
         print(f"[MOTOR] Move complete. Execution time: {actual:.3f}s")
 
+        # Resume continuous if it was running
+        if was_continuous:
+            self.start_continuous()
+
+
+    # --- Continuous Velocity Control (Background) ---
+
+    def start_continuous(self):
+        """Starts background threads that pulse the stepper pins dynamically based on current velocity."""
+        if self._continuous_running:
+            return
+
+        self._continuous_running = True
+        self._velocity_a_hz = 0.0
+        self._velocity_b_hz = 0.0
+
+        self._continuous_thread_a = threading.Thread(target=self._continuous_worker_a, daemon=True)
+        self._continuous_thread_b = threading.Thread(target=self._continuous_worker_b, daemon=True)
+
+        self._continuous_thread_a.start()
+        self._continuous_thread_b.start()
+        print("[MOTOR-CONT] Started continuous velocity threads.")
+
+    def stop_continuous(self):
+        """Stops the continuous velocity threads."""
+        self._continuous_running = False
+        if self._continuous_thread_a:
+            self._continuous_thread_a.join()
+        if self._continuous_thread_b:
+            self._continuous_thread_b.join()
+        print("[MOTOR-CONT] Stopped continuous velocity threads.")
+
+    def set_velocity(self, pan_hz: float, tilt_hz: float):
+        """
+        Update the target velocities for both motors.
+        Pan = (A+B)/2  => A = Pan+Tilt, B = Pan-Tilt
+        """
+        # Calculate A and B velocities
+        a_hz = pan_hz + tilt_hz
+        b_hz = pan_hz - tilt_hz
+
+        self._velocity_a_hz = a_hz
+        self._velocity_b_hz = b_hz
+
+    def _continuous_worker_a(self):
+        """Background thread to pulse Motor A."""
+        # Pull local refs for speed
+        p = self.axis_a.step_pin
+        while self._continuous_running:
+            v = self._velocity_a_hz
+            if abs(v) < 1.0:
+                # If target is ~0 hz, sleep briefly so we don't busy wait a 0 velocity
+                time.sleep(0.01)
+                continue
+                
+            # Set direction
+            self.axis_a.set_direction(v > 0)
+            
+            # Calculate sleep time between pulses (1 / hz)
+            delay = 1.0 / abs(v)
+            
+            GPIO.output(p, GPIO.HIGH)
+            # Short pulse width
+            time.sleep(0.000001)
+            GPIO.output(p, GPIO.LOW)
+            
+            # Wait remainder of the period. We use time.sleep instead of busy wait
+            # to save CPU during free-tracking, though it's less precise than spline mode.
+            time.sleep(max(0, delay - 0.000001))
+
+    def _continuous_worker_b(self):
+        """Background thread to pulse Motor B."""
+        p = self.axis_b.step_pin
+        while self._continuous_running:
+            v = self._velocity_b_hz
+            if abs(v) < 1.0:
+                time.sleep(0.01)
+                continue
+                
+            self.axis_b.set_direction(v > 0)
+            delay = 1.0 / abs(v)
+            
+            GPIO.output(p, GPIO.HIGH)
+            time.sleep(0.000001)
+            GPIO.output(p, GPIO.LOW)
+            
+            time.sleep(max(0, delay - 0.000001))
+
 
     def close(self) -> None:
+        if self._continuous_running:
+            self.stop_continuous()
         self.axis_a.close()
         self.axis_b.close()
 
