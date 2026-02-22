@@ -30,33 +30,57 @@ def main():
         loglevel=Loglevel.INFO, # Set to INFO so it doesn't spam the terminal with debug text
     )
     
-    # Set the Acceleration and maximal Speed in fullsteps
-    tmc.acceleration_fullstep = 2000
-    tmc.max_speed_fullstep = 1000
+    # Get acceleration and speed from user (Enter for defaults)
+    accel_input = input("Acceleration [2000]: ").strip()
+    accel = int(accel_input) if accel_input else 2000
+
+    speed_input = input("Max Speed [1000]: ").strip()
+    max_speed = int(speed_input) if speed_input else 1000
+
+    tmc.acceleration_fullstep = accel
+    tmc.max_speed_fullstep = max_speed
 
     # Activate the motor current output
     tmc.set_motor_enabled(True)
-    print("Motor Enabled. Holding torque active.\n")
+    print(f"\nMotor Enabled. Speed: {max_speed} | Accel: {accel}")
+    print("Commands: degrees (-360 to 360), 'a' = set accel, 's' = set speed, 'q' = quit\n")
 
     try:
         # -----------------------------------------------------------------------
         # Terminal Input Loop
         # -----------------------------------------------------------------------
         while True:
-            user_input = input("Enter degrees to rotate (0-360) or 'q' to quit: ")
-            
+            user_input = input(f"[spd={max_speed} acc={accel}] Enter degrees or command: ").strip()
+
             if user_input.lower() == 'q':
                 break
-                
+            elif user_input.lower() == 's':
+                val = input("  New max speed: ").strip()
+                try:
+                    max_speed = int(val)
+                    tmc.max_speed_fullstep = max_speed
+                    print(f"  Speed set to {max_speed}")
+                except ValueError:
+                    print("  Invalid number.")
+                continue
+            elif user_input.lower() == 'a':
+                val = input("  New acceleration: ").strip()
+                try:
+                    accel = int(val)
+                    tmc.acceleration_fullstep = accel
+                    print(f"  Accel set to {accel}")
+                except ValueError:
+                    print("  Invalid number.")
+                continue
+
             try:
                 degrees = float(user_input)
-                # Allow negative numbers if you want to rotate backward!
                 if -360 <= degrees <= 360:
                     rotate_degrees(tmc, degrees)
                 else:
                     print("Please enter a value between -360 and 360.")
             except ValueError:
-                print("Invalid input. Please enter a valid number.")
+                print("Invalid input. Enter degrees, 'a', 's', or 'q'.")
 
     except KeyboardInterrupt:
         print("\nTest interrupted by user.")
