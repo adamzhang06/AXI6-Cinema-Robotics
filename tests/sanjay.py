@@ -15,7 +15,7 @@ print("---")
 # -----------------------------------------------------------------------
 # 1. Math Function: Generate Trapezoidal Profile
 # -----------------------------------------------------------------------
-def generate_trapezoidal_profile(final_angle_deg, total_time, dt=0.05, steps_per_rev=1600):
+def generate_trapezoidal_profile(final_angle_deg, total_time, dt=0.001, steps_per_rev=400):
     """
     Generates a list of (time, position) tuples forming a trapezoidal velocity profile.
     Uses the 1/3 rule: 1/3 time accelerating, 1/3 cruising, 1/3 decelerating.
