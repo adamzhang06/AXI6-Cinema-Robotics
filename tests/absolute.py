@@ -25,20 +25,58 @@ STEPS_PER_REV = 400  # microsteps per 360°
 VACTUAL_TO_RPS = 0.715  # Approximate: 1 RPS ≈ VACTUAL of ~1398 (12MHz clock)
                          # Adjust this based on your clock. VACTUAL = velocity * (2^24 / fclk)
 
-# ==================== WAYPOINTS ====================
-# Define your trajectory as (time_seconds, position_degrees)
-# The motor will move to each position, arriving exactly at the specified time.
-# Time must be strictly increasing. First point should be (0, starting_position).
+# ==================== TRAPEZOIDAL POINT GENERATOR ====================
+def generate_trapezoidal_points(duration, theta, n, num_points=100):
+    """
+    Generate (time, position) waypoints for a trapezoidal velocity profile.
+    
+    duration:    total move time in seconds
+    theta:       total angle in degrees
+    n:           easing factor (2 = full triangle, higher = sharper ramp)
+    num_points:  number of waypoints to generate
+    
+    Returns: list of (time_s, position_deg) tuples
+    
+    Physics:
+      v_max = (theta/duration) * n/(n-1)
+      a     = v_max * n / duration
+      t_ramp = duration / n
+      
+      Accel phase:   pos(t) = 0.5 * a * t²
+      Cruise phase:  pos(t) = pos_accel + v_max * (t - t_ramp)
+      Decel phase:   pos(t) = theta - 0.5 * a * (duration - t)²
+    """
+    v_avg = theta / duration
+    v_max = v_avg * (n / (n - 1))
+    a = (v_max / duration) * n
+    t_ramp = duration / n  # time for accel (and decel)
+    
+    # Position at end of accel phase
+    pos_at_accel_end = 0.5 * a * t_ramp * t_ramp
+    
+    points = []
+    for i in range(num_points + 1):
+        t = (i / num_points) * duration
+        
+        if t <= t_ramp:
+            # Acceleration phase: p = 0.5 * a * t²
+            pos = 0.5 * a * t * t
+        elif t <= duration - t_ramp:
+            # Cruise phase: p = pos_accel + v_max * (t - t_ramp)
+            pos = pos_at_accel_end + v_max * (t - t_ramp)
+        else:
+            # Deceleration phase: p = theta - 0.5 * a * (duration - t)²
+            t_remaining = duration - t
+            pos = theta - 0.5 * a * t_remaining * t_remaining
+        
+        points.append((round(t, 4), round(pos, 4)))
+    
+    return points
 
-WAYPOINTS = [
-    # (time_s, position_deg)
-    (0,    0),      # Start at 0°
-    (3,    90),     # Reach 90° at t=3s
-    (5,    90),     # Hold at 90° until t=5s
-    (8,    270),    # Reach 270° at t=8s
-    (10,   270),    # Hold at 270° until t=10s
-    (13,   0),      # Return to 0° at t=13s
-]
+
+# ==================== WAYPOINTS ====================
+# Generate trapezoidal trajectory: 5 seconds, 360°, n=2 (triangle)
+WAYPOINTS = generate_trapezoidal_points(duration=5, theta=360, n=3, num_points=50)
 
 def deg_to_steps(deg):
     """Convert degrees to microstep count."""
