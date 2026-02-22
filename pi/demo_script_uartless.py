@@ -79,9 +79,9 @@ def main():
                 if duration <= 0:
                     print("  Time must be > 0")
                     continue
-                if n < 2:
-                    print("  n must be 2+")
-                    continue
+                # if n < 2:
+                #     print("  n must be 2+")
+                #     continue
 
                 execute_move(tmc, theta, duration, n)
 
