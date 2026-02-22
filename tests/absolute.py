@@ -25,46 +25,20 @@ STEPS_PER_REV = 400  # microsteps per 360°
 VACTUAL_TO_RPS = 0.715  # Approximate: 1 RPS ≈ VACTUAL of ~1398 (12MHz clock)
                          # Adjust this based on your clock. VACTUAL = velocity * (2^24 / fclk)
 
-# ==================== TRAPEZOIDAL POINT GENERATOR ====================
-def generate_trapezoidal_points(duration, theta, n, num_points=100):
-    """
-    Generate (time, position) waypoints for a trapezoidal motion profile.
-    
-    duration:    total move time in seconds
-    theta:       total angle in degrees (or steps)
-    n:           shape factor (2 = full triangle, higher = more linear)
-    num_points:  number of waypoints to generate
-    
-    Returns: list of (time_s, position) tuples
-    """
-    # Ramp fraction: what portion of the move is spent ramping
-    # n=2 → ramp = 0.5 (full triangle), n=10 → ramp = 0.1 (mostly linear)
-    ramp_frac = 1.0 / n
-    t_ramp = duration * ramp_frac
-
-    points = []
-    for i in range(num_points + 1):
-        t = (i / num_points) * duration
-
-        if t <= t_ramp:
-            # Ramp in: parabolic (position grows as t²)
-            frac = t / t_ramp
-            pos = theta * (ramp_frac / 2) * frac * frac
-        elif t <= duration - t_ramp:
-            # Middle: linear
-            pos = theta * (ramp_frac / 2) + theta * (1 - ramp_frac) * ((t - t_ramp) / (duration - 2 * t_ramp))
-        else:
-            # Ramp out: inverse parabolic (position flattens)
-            frac = (duration - t) / t_ramp
-            pos = theta - theta * (ramp_frac / 2) * frac * frac
-
-        points.append((round(t, 4), round(pos, 4)))
-
-    return points
-
-
 # ==================== WAYPOINTS ====================
-WAYPOINTS = generate_trapezoidal_points(duration=5, theta=360, n=3, num_points=50)
+# Define your trajectory as (time_seconds, position_degrees)
+# The motor will move to each position, arriving exactly at the specified time.
+# Time must be strictly increasing. First point should be (0, starting_position).
+
+WAYPOINTS = [
+    # (time_s, position_deg)
+    (0,    0),      # Start at 0°
+    (3,    90),     # Reach 90° at t=3s
+    (5,    90),     # Hold at 90° until t=5s
+    (8,    270),    # Reach 270° at t=8s
+    (10,   270),    # Hold at 270° until t=10s
+    (13,   0),      # Return to 0° at t=13s
+]
 
 def deg_to_steps(deg):
     """Convert degrees to microstep count."""
