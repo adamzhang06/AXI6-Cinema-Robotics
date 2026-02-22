@@ -210,9 +210,47 @@ tmc = Tmc2209(
 tmc.set_motor_enabled(True)
 print("[MOTOR] Enabled\n")
 
+# ==================== DIRECT UART FOR FAST VACTUAL ====================
+import serial
+
+# Open UART directly (bypass library for VACTUAL writes)
+_uart_port = UART_PORT.get(tmc_gpio.BOARD, "/dev/serial0")
+_ser = serial.Serial(_uart_port, 115200, timeout=0.1)
+
+REG_VACTUAL = 0x22
+TMC_ADDR = 0x00
+
+def _tmc_crc(data):
+    crc = 0
+    for byte in data:
+        for _ in range(8):
+            if (crc >> 7) ^ (byte & 0x01):
+                crc = (crc << 1) ^ 0x07
+            else:
+                crc = crc << 1
+            byte >>= 1
+        crc &= 0xFF
+    return crc
+
+def fast_set_vactual(velocity):
+    """Write VACTUAL register directly over UART — no library delay.
+    Takes ~1ms instead of ~1s."""
+    # Handle signed: VACTUAL is 24-bit signed
+    if velocity < 0:
+        velocity = (1 << 24) + velocity
+    val = velocity & 0xFFFFFF
+
+    data = [0x05, 0x00, TMC_ADDR, REG_VACTUAL | 0x80,
+            (val >> 24) & 0xFF,
+            (val >> 16) & 0xFF,
+            (val >> 8) & 0xFF,
+            val & 0xFF]
+    crc = _tmc_crc(data)
+    _ser.write(bytes(data + [crc]))
+
 # ==================== TRAJECTORY EXECUTION ====================
 def run_trajectory(waypoints):
-    """Execute the waypoint trajectory using VACTUAL velocity control."""
+    """Execute the waypoint trajectory using direct VACTUAL writes."""
     
     print(f"  Running {len(waypoints)} waypoints...")
     t_start = time.time()
@@ -225,25 +263,25 @@ def run_trajectory(waypoints):
         if dt <= 0:
             continue
         
-        # Calculate required velocity (steps/sec)
+        # Calculate required velocity
         delta_steps = deg_to_steps(pos_next) - deg_to_steps(pos_now)
         steps_per_sec = delta_steps / dt
         vactual = steps_to_vactual(steps_per_sec)
         
-        # Write VACTUAL directly — bypass any library delays
-        tmc.tmc_mc.set_vactual(vactual)
+        # Instant UART write — no library delay
+        fast_set_vactual(vactual)
         
         # Status every ~1 second
         if i % 20 == 0:
             print(f"\r  t={t_now:.1f}s pos={pos_now:.0f}° vel={vactual:+d}", end="", flush=True)
         
-        # Precision sleep until next waypoint
+        # Busy-wait for precision timing
         target_time = t_start + t_next
         while time.time() < target_time:
-            pass  # Busy-wait for precision (sleep is too coarse at 50ms intervals)
+            pass
     
     # Stop
-    tmc.tmc_mc.set_vactual(0)
+    fast_set_vactual(0)
     
     actual_total = time.time() - t_start
     print(f"\n  Done! {actual_total:.2f}s (expected {waypoints[-1][0]}s)")
@@ -253,9 +291,10 @@ try:
     run_trajectory(WAYPOINTS)
 except KeyboardInterrupt:
     print("\nInterrupted!")
-    tmc.tmc_mc.set_vactual(0)
+    fast_set_vactual(0)
 finally:
-    tmc.tmc_mc.set_vactual(0)
+    fast_set_vactual(0)
+    _ser.close()
     tmc.set_motor_enabled(False)
     del tmc
     print("[SHUTDOWN] Motor disabled.")
