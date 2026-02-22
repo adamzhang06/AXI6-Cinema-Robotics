@@ -1,72 +1,131 @@
 #!/usr/bin/env python3
 """
-Motor Velocity Ramp Test (Local Graph Only)
-============================================
-Simulates and displays the velocity ramp curve on a graph.
-No motor hardware needed — just visualizes what the ramp looks like.
+Motor Speed Controller (Mac → Pi via UDP)
+==========================================
+Control motor speed from your Mac using an OpenCV slider.
+Sends commands to pi_motor_server.py on the Pi.
 
-Usage:  python tests/motor_velocity.py
-Press Ctrl+C to stop.
+Usage:
+  1. Start pi_motor_server.py on the Pi
+  2. Run: python tests/motor_velocity.py
+
+Controls:
+  - Drag the Speed slider to set motor speed (0-500)
+  - Drag the Direction slider: 0 = Reverse, 1 = Stop, 2 = Forward
+  - Press Q to quit
 """
 
+import cv2
+import numpy as np
+import socket
+import json
 import time
-import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-from collections import deque
+
+# ==================== NETWORK SETUP ====================
+BEACON_PORT = 5006
+PI_PORT = 5005
+
+def discover_pi(timeout=2):
+    print(f"[NETWORK] Searching for Pi motor server...")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(('', BEACON_PORT))
+    sock.settimeout(timeout)
+    try:
+        data, addr = sock.recvfrom(1024)
+        msg = json.loads(data.decode('utf-8'))
+        if msg.get('service') == 'axi6_motor_server':
+            pi_ip = addr[0]
+            pi_port = msg.get('port', PI_PORT)
+            print(f"[NETWORK] ✅ Found Pi at {pi_ip}:{pi_port}")
+            sock.close()
+            return pi_ip, pi_port
+    except socket.timeout:
+        print(f"[NETWORK] ❌ No Pi found. Using fallback IP.")
+        sock.close()
+        return "10.186.143.105", PI_PORT
+    sock.close()
+    return None, PI_PORT
+
+PI_IP, PI_PORT = discover_pi()
+udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # ==================== CONFIGURATION ====================
-RAMP_RATE   = 10         # Speed increase per second
-MAX_SPEED   = 1000       # Safety cap
+ACCEL = 400
+SEND_HZ = 100
 
-# ==================== LIVE GRAPH SETUP ====================
-plt.ion()
-fig, ax = plt.subplots(figsize=(10, 5))
-fig.patch.set_facecolor('#1a1a2e')
-ax.set_facecolor('#16213e')
+# ==================== OPENCV CONTROL WINDOW ====================
+WINDOW = "Motor Speed Controller"
+cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
+cv2.resizeWindow(WINDOW, 600, 300)
 
-MAX_POINTS = 500
-times = deque(maxlen=MAX_POINTS)
-velocities = deque(maxlen=MAX_POINTS)
+cv2.createTrackbar("Speed", WINDOW, 0, 500, lambda x: None)
+cv2.createTrackbar("Direction", WINDOW, 1, 2, lambda x: None)  # 0=Rev, 1=Stop, 2=Fwd
 
-line, = ax.plot([], [], color='#00ff88', linewidth=2, label='Commanded Speed')
-ax.set_xlabel('Time (s)', color='white', fontsize=12)
-ax.set_ylabel('Motor Speed', color='white', fontsize=12)
-ax.set_title('Motor Velocity Ramp (Simulation)', color='white', fontsize=14, fontweight='bold')
-ax.tick_params(colors='white')
-ax.spines['bottom'].set_color('#444')
-ax.spines['left'].set_color('#444')
-ax.spines['top'].set_visible(False)
-ax.spines['right'].set_visible(False)
-ax.legend(loc='upper left', facecolor='#16213e', edgecolor='#444', labelcolor='white')
-ax.grid(True, alpha=0.2, color='white')
-plt.tight_layout()
-plt.show(block=False)
+def send_command(speed, direction):
+    payload = json.dumps({
+        "slide": {"speed": 0, "dir": 0, "accel": 400},
+        "pan":   {"speed": speed, "dir": direction, "accel": ACCEL},
+        "tilt":  {"speed": 0, "dir": 0, "accel": 400}
+    })
+    udp_sock.sendto(payload.encode('utf-8'), (PI_IP, PI_PORT))
 
-# ==================== RAMP LOOP ====================
-print(f"\nVelocity Ramp Simulation | Rate: {RAMP_RATE} vel/s | Max: {MAX_SPEED}")
-print("Press Ctrl+C to stop.\n")
+print(f"\n[READY] Sending to Pi @ {PI_IP}:{PI_PORT}")
+print("Drag sliders to control motor. Press Q to quit.\n")
 
-start_time = time.time()
+loop_period = 1.0 / SEND_HZ
 
 try:
     while True:
-        elapsed = time.time() - start_time
-        speed = min(int(elapsed * RAMP_RATE), MAX_SPEED)
+        loop_start = time.time()
 
-        times.append(elapsed)
-        velocities.append(speed)
+        speed = cv2.getTrackbarPos("Speed", WINDOW)
+        dir_val = cv2.getTrackbarPos("Direction", WINDOW)
 
-        line.set_data(list(times), list(velocities))
-        ax.set_xlim(max(0, elapsed - 20), elapsed + 1)
-        ax.set_ylim(0, max(speed + 50, 100))
-        fig.canvas.draw_idle()
-        fig.canvas.flush_events()
+        # Map slider: 0 = -1 (reverse), 1 = 0 (stop), 2 = +1 (forward)
+        direction = dir_val - 1
 
-        print(f"\r  ⏱ {elapsed:6.1f}s | 🏎 Speed: {speed:4d}", end="", flush=True)
-        time.sleep(1.0 / 30)  # 30fps refresh
+        if direction == 0:
+            speed = 0
+
+        send_command(speed, direction)
+
+        # Draw status display
+        frame = np.zeros((300, 600, 3), dtype=np.uint8)
+        frame[:] = (30, 30, 40)
+
+        dir_text = {-1: "< REVERSE", 0: "STOPPED", 1: "FORWARD >"}[direction]
+        dir_color = {-1: (100, 100, 255), 0: (128, 128, 128), 1: (100, 255, 100)}[direction]
+
+        cv2.putText(frame, "AXI6 Motor Speed Controller", (30, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        cv2.putText(frame, f"Target: {PI_IP}:{PI_PORT}", (30, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), 1)
+
+        cv2.putText(frame, f"Speed: {speed}", (30, 140),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 136), 3)
+        cv2.putText(frame, dir_text, (30, 200),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, dir_color, 2)
+
+        # Speed bar
+        bar_w = int((speed / 500) * 540)
+        cv2.rectangle(frame, (30, 240), (30 + bar_w, 270), (0, 255, 136), -1)
+        cv2.rectangle(frame, (30, 240), (570, 270), (100, 100, 100), 1)
+
+        cv2.imshow(WINDOW, frame)
+
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
+
+        sleep_time = loop_period - (time.time() - loop_start)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
 except KeyboardInterrupt:
-    print(f"\n\n[STOP] Final speed: {speed} at {elapsed:.1f}s")
-    plt.ioff()
-    plt.show()
+    pass
+
+finally:
+    send_command(0, 0)
+    print("[SHUTDOWN] Stop command sent to Pi.")
+    cv2.destroyAllWindows()
