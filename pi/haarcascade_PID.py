@@ -1,6 +1,7 @@
 import cv2
 import time
 import threading
+from flask import Flask, Response
 from tmc_driver import (
     Tmc2209, Loglevel, MovementAbsRel, TmcEnableControlPin, TmcMotionControlStepDir,
 )
@@ -98,53 +99,53 @@ def motor_loop():
     tmc.set_motor_enabled(False)
     print("\n[SHUTDOWN] Motor thread safely disabled.")
 
-# --- 3. VISION LOOP (runs in main thread, terminal output) ---
+# --- 3. VISION & SERVER ---
+app = Flask(__name__)
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-def vision_loop():
+def generate_frames():
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+    
+    # Manual exposure (Adjust if too dark/bright)
+    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1) 
     cap.set(cv2.CAP_PROP_EXPOSURE, 400)
-
-    print("\n[VISION] Haar Cascade face detection active.")
-    print(f"[VISION] Resolution: {WIDTH}x{HEIGHT} | Deadzone: {DEADZONE}px")
-    print("-" * 50)
-
+    
     frame_count = 0
     try:
         while state.running:
             success, frame = cap.read()
-            if not success or frame is None:
+            if not success or frame is None: 
                 time.sleep(0.01)
                 continue
-
+                
             frame = cv2.resize(frame, (WIDTH, HEIGHT))
             frame = cv2.flip(frame, 1)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
+            
             faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-
+            
             if len(faces) > 0:
                 (x, y, w, h) = faces[0]
                 raw_cx = x + (w // 2)
-
+                
                 # --- APPLY MOVING AVERAGE FILTER ---
                 state.history_cx.append(raw_cx)
                 if len(state.history_cx) > state.filter_size:
                     state.history_cx.pop(0)
-
+                
                 smooth_cx = sum(state.history_cx) / len(state.history_cx)
-
+                
+                # Update Target and Ghost identically before drawing
                 state.target_cx = smooth_cx
                 state.ghost_cx = smooth_cx
                 state.target_visible = True
-
-                # Draw face box and tracking dot
+                
+                # Visuals: Box and dot are now perfectly locked together
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                cv2.circle(frame, (int(state.ghost_cx), y + (h // 2)), 6, (0, 0, 255), -1)
+                cv2.circle(frame, (int(state.ghost_cx), y + (h // 2)), 6, (0, 0, 255), -1) 
 
                 if frame_count % 30 == 0:
                     offset = int(smooth_cx - CENTER_X)
@@ -156,38 +157,28 @@ def vision_loop():
                 if frame_count % 60 == 0:
                     print("👻 NO FACE | Waiting for detection...")
 
-            # Draw deadzone lines
+            # Draw HUD
             cv2.line(frame, (CENTER_X - DEADZONE, 0), (CENTER_X - DEADZONE, HEIGHT), (0, 255, 255), 1)
             cv2.line(frame, (CENTER_X + DEADZONE, 0), (CENTER_X + DEADZONE, HEIGHT), (0, 255, 255), 1)
 
-            # Show video feed
-            cv2.imshow('AXI6 Haar Cascade', frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-
+            ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
             frame_count += 1
-    except KeyboardInterrupt:
-        pass
     finally:
         cap.release()
-        cv2.destroyAllWindows()
-        print("[VISION] Camera released.")
 
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/')
+def index():
+    return '<body style="margin:0; background:#000;"><img src="/video_feed" style="width:100vw; height:100vh; object-fit:contain;"></body>'
 
 if __name__ == "__main__":
-    print("\n" + "=" * 50)
-    print("  AXI6 Haar Cascade PID Controller (Pi)")
-    print("  Press Ctrl+C to stop.")
-    print("=" * 50)
-
     m_thread = threading.Thread(target=motor_loop, daemon=True)
     m_thread.start()
-
     try:
-        vision_loop()
+        app.run(host='0.0.0.0', port=5000, threaded=True, debug=False)
     except KeyboardInterrupt:
-        pass
-    finally:
         state.running = False
-        time.sleep(0.5)  # Let motor thread shut down cleanly
-        print("\n[SHUTDOWN] System offline.")
