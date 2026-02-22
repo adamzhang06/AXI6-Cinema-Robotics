@@ -112,7 +112,7 @@ def motor_pulse_loop(step_pin, times_array):
             
         # Fire pulse
         GPIO.output(step_pin, GPIO.HIGH)
-        time.sleep(0.000001) # 1 microsecond hold
+        time.sleep(0.00001) # 1 microsecond hold
         GPIO.output(step_pin, GPIO.LOW)
 
 
