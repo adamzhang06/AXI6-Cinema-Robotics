@@ -28,54 +28,42 @@ VACTUAL_TO_RPS = 0.715  # Approximate: 1 RPS ≈ VACTUAL of ~1398 (12MHz clock)
 # ==================== TRAPEZOIDAL POINT GENERATOR ====================
 def generate_trapezoidal_points(duration, theta, n, num_points=100):
     """
-    Generate (time, position) waypoints for a trapezoidal velocity profile.
+    Generate (time, position) waypoints for a trapezoidal motion profile.
     
     duration:    total move time in seconds
-    theta:       total angle in degrees
-    n:           easing factor (2 = full triangle, higher = sharper ramp)
+    theta:       total angle in degrees (or steps)
+    n:           shape factor (2 = full triangle, higher = more linear)
     num_points:  number of waypoints to generate
     
-    Returns: list of (time_s, position_deg) tuples
-    
-    Physics:
-      v_max = (theta/duration) * n/(n-1)
-      a     = v_max * n / duration
-      t_ramp = duration / n
-      
-      Accel phase:   pos(t) = 0.5 * a * t²
-      Cruise phase:  pos(t) = pos_accel + v_max * (t - t_ramp)
-      Decel phase:   pos(t) = theta - 0.5 * a * (duration - t)²
+    Returns: list of (time_s, position) tuples
     """
-    v_avg = theta / duration
-    v_max = v_avg * (n / (n - 1))
-    a = (v_max / duration) * n
-    t_ramp = duration / n  # time for accel (and decel)
-    
-    # Position at end of accel phase
-    pos_at_accel_end = 0.5 * a * t_ramp * t_ramp
-    
+    # Ramp fraction: what portion of the move is spent ramping
+    # n=2 → ramp = 0.5 (full triangle), n=10 → ramp = 0.1 (mostly linear)
+    ramp_frac = 1.0 / n
+    t_ramp = duration * ramp_frac
+
     points = []
     for i in range(num_points + 1):
         t = (i / num_points) * duration
-        
+
         if t <= t_ramp:
-            # Acceleration phase: p = 0.5 * a * t²
-            pos = 0.5 * a * t * t
+            # Ramp in: parabolic (position grows as t²)
+            frac = t / t_ramp
+            pos = theta * (ramp_frac / 2) * frac * frac
         elif t <= duration - t_ramp:
-            # Cruise phase: p = pos_accel + v_max * (t - t_ramp)
-            pos = pos_at_accel_end + v_max * (t - t_ramp)
+            # Middle: linear
+            pos = theta * (ramp_frac / 2) + theta * (1 - ramp_frac) * ((t - t_ramp) / (duration - 2 * t_ramp))
         else:
-            # Deceleration phase: p = theta - 0.5 * a * (duration - t)²
-            t_remaining = duration - t
-            pos = theta - 0.5 * a * t_remaining * t_remaining
-        
+            # Ramp out: inverse parabolic (position flattens)
+            frac = (duration - t) / t_ramp
+            pos = theta - theta * (ramp_frac / 2) * frac * frac
+
         points.append((round(t, 4), round(pos, 4)))
-    
+
     return points
 
 
 # ==================== WAYPOINTS ====================
-# Generate trapezoidal trajectory: 5 seconds, 360°, n=2 (triangle)
 WAYPOINTS = generate_trapezoidal_points(duration=5, theta=360, n=3, num_points=50)
 
 def deg_to_steps(deg):
