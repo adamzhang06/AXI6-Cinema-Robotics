@@ -210,43 +210,16 @@ tmc = Tmc2209(
 tmc.set_motor_enabled(True)
 print("[MOTOR] Enabled\n")
 
-# ==================== DIRECT UART FOR FAST VACTUAL ====================
-import serial
-
-# Open UART directly (bypass library for VACTUAL writes)
-_uart_port = UART_PORT.get(tmc_gpio.BOARD, "/dev/serial0")
-_ser = serial.Serial(_uart_port, 115200, timeout=0.1)
-
+# ==================== FAST VACTUAL VIA LIBRARY UART ====================
 REG_VACTUAL = 0x22
-TMC_ADDR = 0x00
-
-def _tmc_crc(data):
-    crc = 0
-    for byte in data:
-        for _ in range(8):
-            if (crc >> 7) ^ (byte & 0x01):
-                crc = (crc << 1) ^ 0x07
-            else:
-                crc = crc << 1
-            byte >>= 1
-        crc &= 0xFF
-    return crc
 
 def fast_set_vactual(velocity):
-    """Write VACTUAL register directly over UART — no library delay.
-    Takes ~1ms instead of ~1s."""
+    """Write VACTUAL using the library's own UART — bypasses motion control delay."""
     # Handle signed: VACTUAL is 24-bit signed
     if velocity < 0:
         velocity = (1 << 24) + velocity
     val = velocity & 0xFFFFFF
-
-    data = [0x05, 0x00, TMC_ADDR, REG_VACTUAL | 0x80,
-            (val >> 24) & 0xFF,
-            (val >> 16) & 0xFF,
-            (val >> 8) & 0xFF,
-            val & 0xFF]
-    crc = _tmc_crc(data)
-    _ser.write(bytes(data + [crc]))
+    tmc.tmc_com.write_reg_check(REG_VACTUAL, val)
 
 # ==================== TRAJECTORY EXECUTION ====================
 def run_trajectory(waypoints):
@@ -294,7 +267,6 @@ except KeyboardInterrupt:
     fast_set_vactual(0)
 finally:
     fast_set_vactual(0)
-    _ser.close()
     tmc.set_motor_enabled(False)
     del tmc
     print("[SHUTDOWN] Motor disabled.")
