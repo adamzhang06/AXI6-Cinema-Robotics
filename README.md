@@ -1,44 +1,75 @@
-# AXI6: Predictive Cinematic Autopilot 🎥🤖
+# AXI6 Cinema Robotics
 
-**A Multi-Axis Motorized Camera System with Predictive AI Tracking**
+Autonomous camera head with differential pan/tilt drive and AI tracking.
 
-AXI6 (Axis-Intelligent 6) is a high-precision, multi-threaded robotics platform designed for cinema-grade camera movement. Built for **StarkHacks 2026**, it moves beyond reactive tracking by utilizing **Kalman Filters** to predict subject movement, enabling smooth, cinematic shots even under network latency or temporary visual occlusions.
+## Project Structure
 
-## 🚀 Key Features
+```
+AXI6 Cinema Robotics/
+│
+├── core/                    # Shared logic — pure Python, hardware-agnostic
+│   ├── motor/
+│   │   ├── tmc2209.py       # TMC2209 UART register driver
+│   │   ├── axis.py          # Single-axis wrapper (velocity ramping, position)
+│   │   └── differential.py  # Pan/tilt differential drive (2-motor)
+│   ├── motion/
+│   │   ├── spline.py        # Cubic Bézier spline interpolation
+│   │   └── trajectory.py    # Real-time spline playback → DifferentialDrive
+│   └── comms/
+│       └── protocol.py      # Shared Mac↔Pi socket message protocol
+│
+├── pi/                      # Runs on Raspberry Pi
+│   ├── server.py            # Main Pi socket server → DifferentialDrive
+│   ├── tracking/            # Computer vision tracking algorithms
+│   │   ├── haarcascade.py
+│   │   ├── haarcascade_pid.py
+│   │   ├── mediapipe_stream.py
+│   │   └── yolo_stream.py
+│   └── demos/               # Standalone Pi test/demo scripts
+│
+├── mac/                     # Runs on Mac (operator side)
+│   ├── spline_server.py     # Spline editor server + Pi relay
+│   ├── tracking/            # Mac-side tracking (YOLO, mediapipe, orbit)
+│   │   ├── yolo.py
+│   │   ├── yolo_kf.py
+│   │   ├── mediapipe.py
+│   │   └── orbit.py
+│   └── ui/
+│       └── spline_editor.html  # Pan/tilt spline editor UI
+│
+├── models/                  # YOLO weights and model files
+├── legacy/                  # Pre-refactor single-motor reference code (read-only)
+│   └── README.md            # Index of what's in legacy/
+│
+├── requirements.txt
+└── README.md
+```
 
-* **Predictive Motion Engine:** Implements 2D Kalman Filters to estimate subject trajectory, compensating for the communication lag between Vision (Mac) and Motion (Raspberry Pi).
-* **Velocity-Based PID Control:** Utilizing `PyTmcStepper` for ultra-smooth, silent motor acceleration profiles on the Pan, Tilt, and Slide axes.
-* **Recursive Path Learning:** "Record" manual camera movements and use AI-driven spline interpolation to play back "perfected," jitter-free cinematic paths.
-* **Intelligent Auto-Parallax:** Real-time geometric calculation for "Orbit" shots, keeping subjects centered while the rail executes complex lateral moves.
+## Quick Start
 
-## 🛠️ Tech Stack
+### Mac (Spline Editor)
+```bash
+python mac/spline_server.py
+# Open http://localhost:8080/spline_editor.html
+```
 
-* **Hardware:** Raspberry Pi 4/5, TMC2209 SilentStepStick Drivers, NEMA 17 Stepper Motors.
-* **Software:** Python 3.11, `PyTmcStepper`, OpenCV (Computer Vision), NumPy (Matrix Math for Kalman).
-* **Architecture:** Multi-threaded distributed system (Computer Vision processing on macOS ↔ Motor Control via RPi).
+### Pi (Motor Server)
+```bash
+python pi/server.py
+```
 
----
+## Architecture
 
-## 🏗️ Project Description (For Submission)
+The system uses a **differential drive** for pan and tilt:
 
-**The Problem:**
-Traditional motorized camera rails are either "dumb" (requiring manual keyframing) or "reactive" (following a target with jerky, delayed movements). In a hackathon environment, network latency between a powerful vision processor and a motor controller usually results in "hunting" or oscillation.
+```
+Pan  velocity = (motor_A + motor_B) / 2
+Tilt velocity = (motor_A - motor_B) / 2
+```
 
-**The Solution:**
-AXI6 treats cinematography as a **state-estimation problem**. By decoupling the Vision pipeline from the Motor Control loop, we use a **Kalman Filter** to maintain a constant "belief" of the subject's position and velocity. This allows the Raspberry Pi to execute smooth **velocity-based PID moves** based on where the subject *will be*, not just where they were.
+Both motors are TMC2209 steppers controlled via VACTUAL register over UART,
+allowing the chip to generate step pulses internally (no step/dir wiring needed).
 
-Our **Recursive Path Learning** feature allows creators to guide the camera by hand, after which our algorithm "re-imagines" that path as a mathematically perfect curve, bridging the gap between human creativity and robotic precision.
+## Legacy Reference
 
----
-
-## 📈 Current Workflow & Roadmap
-
-1. [x] Multi-threaded Vision/Motor architecture.
-2. [x] Velocity-based PID for Pan Axis.
-3. [ ] **Current Phase:** Kalman Filter integration for  trajectory prediction.
-4. [ ] Multi-axis synchronization for Auto-Parallax (Orbit) shots.
-5. [ ] Recursive Spline smoothing for recorded paths.
-
----
-
-**Would you like me to add a "Getting Started" section with the specific pinout for your TMC drivers, or should we jump into the Kalman Filter code implementation?**
+See `legacy/README.md` for the original single-motor scripts and camera tracking logic.
