@@ -50,12 +50,12 @@ tmc.movement_abs_rel = MovementAbsRel.ABSOLUTE
 # -----------------------------------------------------------------------
 # these functions change settings in the TMC register
 # -----------------------------------------------------------------------
-tmc.set_direction_reg(False)
-tmc.set_current_rms(300)
-tmc.set_interpolation(True)
-tmc.set_spreadcycle(False)
-tmc.set_microstepping_resolution(2)
-tmc.set_internal_rsense(False)
+# tmc.set_direction_reg(False)
+# tmc.set_current_rms(300)
+# tmc.set_interpolation(True)
+# tmc.set_spreadcycle(False)
+# tmc.set_microstepping_resolution(2)
+# tmc.set_internal_rsense(False)
 
 
 print("---\n---")
@@ -122,18 +122,18 @@ tmc.set_motor_enabled(True)
 # the script will calculate the duration based on the speed and the revolutions
 # Movement of the Motor will not be very accurate with this way
 # -----------------------------------------------------------------------
-tmc.tmc_mc.set_vactual_rpm(30, revolutions=2)
-tmc.tmc_mc.set_vactual_rpm(-120, revolutions=2)
-time.sleep(1)
-tmc.tmc_mc.set_vactual_rpm(30, duration=4)
-tmc.tmc_mc.set_vactual_rpm(-120, duration=1)
+# tmc.tmc_mc.set_vactual_rpm(30, revolutions=2)
+# tmc.tmc_mc.set_vactual_rpm(-120, revolutions=2)
+# time.sleep(1)
+# tmc.tmc_mc.set_vactual_rpm(30, duration=4)
+# tmc.tmc_mc.set_vactual_rpm(-120, duration=1)
 
 
 # -----------------------------------------------------------------------
 # use acceleration (velocity ramping) with VActual
 # does not work with revolutions as parameter
 # -----------------------------------------------------------------------
-# tmc.tmc_mc.set_vactual_rpm(-120, duration=10, acceleration=500)
+tmc.tmc_mc.set_vactual_rpm(-120, duration=10, acceleration=500)
 
 
 # -----------------------------------------------------------------------
