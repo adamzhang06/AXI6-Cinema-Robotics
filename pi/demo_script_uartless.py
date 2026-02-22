@@ -17,34 +17,37 @@ def execute_move(tmc, theta, duration, easing):
     duration: time in seconds
     easing:   1 - 100 (1 = sharp, 100 = smooth triangle)
     """
-    # Convert degrees to steps (keep signed for direction)
+    # Assuming standard NEMA 17 (200 full steps/rev). Adjust if using 0.9° (400)
+    FULL_STEPS_PER_REV = 200 
+    
+    # Calculate microstepping multiplier (e.g., 1600 / 200 = 8 microsteps)
+    MICROSTEPS = STEPS_PER_REV / FULL_STEPS_PER_REV 
+
+    # Convert degrees to target microstep pulses
     target_steps = int(theta * STEPS_PER_REV / 360)
     abs_steps = abs(target_steps)
     
-    # Catch zero-movement to prevent division by zero errors
     if abs_steps == 0:
         return
 
     # 1. Calculate Acceleration Time (t_a)
-    # Easing (1-100) mapped to a max of 50% of the total duration
     t_a = (easing * duration) / 200.0
 
-    # 2. Calculate Maximum Speed (steps / second)
-    # v_max = total_distance / (total_time - acceleration_time)
-    max_speed = abs_steps / (duration - t_a)
+    # 2. Max Speed and Accel in MICROSTEPS per sec
+    max_speed_micro = abs_steps / (duration - t_a)
+    accel_micro = max_speed_micro / t_a
 
-    # 3. Calculate Acceleration (steps / second^2)
-    # a_max = v_max / acceleration_time
-    accel = max_speed / t_a
+    # 3. FIX: Convert to FULL STEPS per sec for the TMC properties
+    max_speed_full = max_speed_micro / MICROSTEPS
+    accel_full = accel_micro / MICROSTEPS
 
-    # Clamp to integers (TMC driver requires ints)
-    max_speed_int = max(int(max_speed), 1)
-    accel_int = max(int(accel), 1)
+    print(f"  θ={theta}° → {target_steps} steps | speed={max_speed_full:.2f} | accel={accel_full:.2f} | time={duration}s | ease={easing}%")
 
-    print(f"  θ={theta}° → {target_steps} steps | speed={max_speed_int} | accel={accel_int} | time={duration}s | ease={easing}%")
-
-    tmc.acceleration_fullstep = accel_int
-    tmc.max_speed_fullstep = max_speed_int
+    # The library accepts floats for these properties
+    tmc.acceleration_fullstep = accel_full
+    tmc.max_speed_fullstep = max_speed_full
+    
+    # run_to_position_steps expects raw microstep pulses
     tmc.run_to_position_steps(target_steps, MovementAbsRel.RELATIVE)
 
 def main():
