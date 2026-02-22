@@ -110,9 +110,46 @@ def run_trajectory(waypoints):
     actual_total = time.time() - t_start
     print(f"\n  Done! Total time: {actual_total:.2f}s (expected {waypoints[-1][0]}s)")
 
+# ==================== SMOOTHING ====================
+def smooth_waypoints(waypoints, update_hz=20):
+    """
+    Take coarse waypoints and interpolate into fine sub-steps
+    using cubic spline for smooth velocity transitions.
+    
+    update_hz: how often to update VACTUAL (20 = every 50ms)
+    """
+    import numpy as np
+
+    times = [w[0] for w in waypoints]
+    positions = [w[1] for w in waypoints]
+
+    # Total duration
+    t_end = times[-1]
+    num_points = int(t_end * update_hz)
+
+    # Fine time steps
+    t_fine = np.linspace(0, t_end, num_points + 1)
+
+    # Cubic spline interpolation (smooth position = smooth velocity)
+    from numpy import interp
+    try:
+        from scipy.interpolate import CubicSpline
+        cs = CubicSpline(times, positions, bc_type='clamped')  # Zero velocity at start/end
+        p_fine = cs(t_fine)
+    except ImportError:
+        # Fallback: linear interpolation if scipy not available
+        print("  [WARN] scipy not found, using linear interpolation")
+        p_fine = np.interp(t_fine, times, positions)
+
+    return [(round(float(t), 4), round(float(p), 4)) for t, p in zip(t_fine, p_fine)]
+
 # ==================== RUN ====================
+# Smooth the coarse waypoints into fine 50ms steps
+FINE_WAYPOINTS = smooth_waypoints(WAYPOINTS, update_hz=20)
+print(f"Smoothed: {len(WAYPOINTS)} waypoints → {len(FINE_WAYPOINTS)} sub-steps")
+
 try:
-    run_trajectory(WAYPOINTS)
+    run_trajectory(FINE_WAYPOINTS)
 except KeyboardInterrupt:
     print("\nInterrupted!")
     tmc.tmc_mc.set_vactual_dur(0)
