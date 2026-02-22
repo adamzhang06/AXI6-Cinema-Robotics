@@ -170,6 +170,7 @@ def vision_loop():
         pass
     finally:
         cap.release()
+        cv2.destroyAllWindows()
         print("[VISION] Camera released.")
 
 
