@@ -21,7 +21,7 @@ from tmc_driver import (
 from tmc_driver.com import TmcComUart
 
 # ==================== CONSTANTS ====================
-STEPS_PER_REV = 1600  # microsteps per 360°
+STEPS_PER_REV = 400  # microsteps per 360°
 VACTUAL_TO_RPS = 0.715  # Approximate: 1 RPS ≈ VACTUAL of ~1398 (12MHz clock)
                          # Adjust this based on your clock. VACTUAL = velocity * (2^24 / fclk)
 
