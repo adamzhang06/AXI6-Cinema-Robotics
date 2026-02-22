@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AXI6 Spline Trajectory Editor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #111827;
+      --bg-card: #1a2332;
+      --bg-input: #0f1a2b;
+      --border: #2a3a50;
+      --border-focus: #3b82f6;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+      --accent-glow: rgba(59, 130, 246, 0.25);
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --success: #10b981;
+      --grid-line: rgba(59, 130, 246, 0.06);
+      --grid-line-major: rgba(59, 130, 246, 0.12);
+      --curve-color: #3b82f6;
+      --velocity-color: #f59e0b;
+      --point-color: #60a5fa;
+      --point-hover: #93c5fd;
+      --point-selected: #f59e0b;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 28px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+    }
+
+    .app-header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .app-header .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-top: 2px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 8px 18px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.08);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .btn-danger {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .main-layout {
+      display: flex;
+      height: calc(100vh - 61px);
+    }
+
+    .sidebar {
+      width: 280px;
+      min-width: 280px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .panel-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .input-group label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .input-group input {
+      padding: 8px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      transition: border 0.2s;
+    }
+
+    .input-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .input-row .input-group {
+      flex: 1;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
+    }
+
+    .checkbox-group label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .points-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .point-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+    }
+
+    .point-item:hover {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    .point-item .delete-pt {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+
+    .point-item .delete-pt:hover {
+      color: var(--danger);
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .canvas-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .canvas-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .canvas-toolbar .coords {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      color: var(--text-secondary);
+    }
+
+    .canvas-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    .legend {
+      display: flex;
+      gap: 16px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .legend-line {
+      width: 16px;
+      height: 2px;
+      border-radius: 1px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--success);
+      border-radius: 10px;
+      color: var(--success);
+      font-size: 13px;
+      font-weight: 500;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 100;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-value {
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      color: var(--text-primary);
+    }
+
+    .help-text {
+      font-size: 11px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      padding: 10px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .help-text kbd {
+      display: inline-block;
+      padding: 1px 6px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 10px;
+      font-family: inherit;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="app-header">
+    <div>
+      <h1>AXI6 Spline Trajectory Editor</h1>
+      <div class="subtitle">Catmull-Rom spline → motor trajectory control</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-danger" id="btnClear">✕ Clear All</button>
+      <button class="btn" id="btnPreset">◆ Preset: Trapezoid</button>
+      <button class="btn btn-primary" id="btnExport">▶ Send to Motor</button>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <div class="sidebar">
+      <!-- Parameters -->
+      <div>
+        <div class="panel-title">Parameters</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div class="input-row">
+            <div class="input-group">
+              <label>Total Time (s)</label>
+              <input type="number" id="inputTime" value="3.0" step="0.1" min="0.1">
+            </div>
+            <div class="input-group">
+              <label>Max Angle (°)</label>
+              <input type="number" id="inputAngle" value="360" step="1" min="1">
+            </div>
+          </div>
+          <div class="input-row">
+            <div class="input-group">
+              <label>dt (s)</label>
+              <input type="number" id="inputDt" value="0.001" step="0.001" min="0.0001">
+            </div>
+            <div class="input-group">
+              <label>Steps/Rev</label>
+              <input type="number" id="inputSteps" value="400" step="1" min="1">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Display Options -->
+      <div>
+        <div class="panel-title">Display</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="checkbox-group">
+            <input type="checkbox" id="chkVelocity" checked>
+            <label for="chkVelocity">Show velocity curve</label>
+          </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="chkGrid" checked>
+            <label for="chkGrid">Show grid</label>
+          </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="chkSnap">
+            <label for="chkSnap">Snap to grid</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div>
+        <div class="panel-title">Trajectory Stats</div>
+        <div class="stats-bar">
+          <div class="stat">
+            <span class="stat-label">Points</span>
+            <span class="stat-value" id="statPoints">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Segments</span>
+            <span class="stat-value" id="statSegments">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Max Vel</span>
+            <span class="stat-value" id="statMaxVel">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Control Points -->
+      <div>
+        <div class="panel-title">Control Points</div>
+        <div class="points-list" id="pointsList"></div>
+      </div>
+
+      <!-- Help -->
+      <div>
+        <div class="panel-title">Controls</div>
+        <div class="help-text">
+          <kbd>Click</kbd> canvas to add a control point<br>
+          <kbd>Drag</kbd> a point to move it<br>
+          <kbd>Right-click</kbd> a point to delete it<br>
+          <kbd>Scroll</kbd> to zoom Y-axis<br>
+          First &amp; last points lock to edges
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas-area">
+      <div class="canvas-toolbar">
+        <div class="legend">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:var(--curve-color)"></div>
+            Position (angle)
+          </div>
+          <div class="legend-item">
+            <div class="legend-line" style="background:var(--velocity-color)"></div>
+            Velocity (steps/s)
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:var(--point-color);width:8px;height:8px;"></div>
+            Control point
+          </div>
+        </div>
+        <div class="coords" id="coordsDisplay">t: — | angle: —</div>
+      </div>
+      <div class="canvas-wrapper">
+        <canvas id="mainCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+(() => {
+  // ---- STATE ----
+  const state = {
+    controlPoints: [], // {x: time_fraction (0-1), y: angle_fraction (0-1)}
+    dragging: null,     // index of point being dragged
+    hovered: null,      // index of point being hovered
+  };
+
+  // ---- ELEMENTS ----
+  const canvas = document.getElementById('mainCanvas');
+  const ctx = canvas.getContext('2d');
+  const coordsDisplay = document.getElementById('coordsDisplay');
+  const pointsList = document.getElementById('pointsList');
+  const toast = document.getElementById('toast');
+
+  const inputTime = document.getElementById('inputTime');
+  const inputAngle = document.getElementById('inputAngle');
+  const inputDt = document.getElementById('inputDt');
+  const inputSteps = document.getElementById('inputSteps');
+  const chkVelocity = document.getElementById('chkVelocity');
+  const chkGrid = document.getElementById('chkGrid');
+  const chkSnap = document.getElementById('chkSnap');
+
+  // ---- CANVAS LAYOUT ----
+  const MARGIN = { top: 40, right: 40, bottom: 50, left: 70 };
+
+  function getPlotArea() {
+    return {
+      x: MARGIN.left,
+      y: MARGIN.top,
+      w: canvas.width - MARGIN.left - MARGIN.right,
+      h: canvas.height - MARGIN.top - MARGIN.bottom,
+    };
+  }
+
+  function resizeCanvas() {
+    const wrapper = canvas.parentElement;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = wrapper.clientWidth * dpr;
+    canvas.height = wrapper.clientHeight * dpr;
+    canvas.style.width = wrapper.clientWidth + 'px';
+    canvas.style.height = wrapper.clientHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+
+  // ---- PARAMS ----
+  function getParams() {
+    return {
+      totalTime: parseFloat(inputTime.value) || 3,
+      maxAngle: parseFloat(inputAngle.value) || 360,
+      dt: parseFloat(inputDt.value) || 0.001,
+      stepsPerRev: parseInt(inputSteps.value) || 400,
+    };
+  }
+
+  // ---- COORDINATE TRANSFORMS ----
+  function fracToCanvas(fx, fy) {
+    const p = getPlotArea();
+    return { cx: p.x + fx * p.w, cy: p.y + (1 - fy) * p.h };
+  }
+
+  function canvasToFrac(cx, cy) {
+    const p = getPlotArea();
+    return {
+      fx: (cx - p.x) / p.w,
+      fy: 1 - (cy - p.y) / p.h,
+    };
+  }
+
+  function fracToReal(fx, fy) {
+    const params = getParams();
+    return { t: fx * params.totalTime, angle: fy * params.maxAngle };
+  }
+
+  function realToFrac(t, angle) {
+    const params = getParams();
+    return { fx: t / params.totalTime, fy: angle / params.maxAngle };
+  }
+
+  // ---- CATMULL-ROM SPLINE ----
+  function catmullRom(p0, p1, p2, p3, t) {
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return 0.5 * (
+      (2 * p1) +
+      (-p0 + p2) * t +
+      (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+      (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+    );
+  }
+
+  function evaluateSpline(points, numSamples) {
+    if (points.length < 2) return points.map(p => ({ ...p }));
+
+    const result = [];
+    const n = points.length - 1;
+
+    for (let i = 0; i < n; i++) {
+      const p0 = points[Math.max(0, i - 1)];
+      const p1 = points[i];
+      const p2 = points[Math.min(n, i + 1)];
+      const p3 = points[Math.min(n, i + 2)];
+
+      const segs = Math.max(1, Math.round(numSamples / n));
+      for (let s = 0; s < segs; s++) {
+        const t = s / segs;
+        result.push({
+          x: catmullRom(p0.x, p1.x, p2.x, p3.x, t),
+          y: catmullRom(p0.y, p1.y, p2.y, p3.y, t),
+        });
+      }
+    }
+    // add final point
+    result.push({ ...points[n] });
+    return result;
+  }
+
+  // ---- DRAWING ----
+  function draw() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
+    ctx.clearRect(0, 0, w, h);
+
+    const p = getPlotArea();
+    const params = getParams();
+
+    // Background
+    ctx.fillStyle = '#0d1320';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+
+    // Grid
+    if (chkGrid.checked) {
+      drawGrid(p, params);
+    }
+
+    // Axes
+    drawAxes(p, params);
+
+    // Spline curve
+    const pts = getSortedPoints();
+    if (pts.length >= 2) {
+      const spline = evaluateSpline(pts, 400);
+      drawCurve(spline, p);
+
+      // Velocity curve overlay
+      if (chkVelocity.checked) {
+        drawVelocityCurve(spline, p, params);
+      }
+    }
+
+    // Control points
+    pts.forEach((pt, i) => {
+      const { cx, cy } = fracToCanvas(pt.x, pt.y);
+      const isHovered = state.hovered === findOriginalIndex(pt);
+      const isDragging = state.dragging === findOriginalIndex(pt);
+      const isEndpoint = i === 0 || i === pts.length - 1;
+
+      const radius = isHovered || isDragging ? 8 : 6;
+
+      // Glow
+      if (isHovered || isDragging) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+        ctx.fillStyle = isDragging ? 'rgba(245,158,11,0.12)' : 'rgba(96,165,250,0.12)';
+        ctx.fill();
+      }
+
+      // Point
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = isDragging ? 'var(--point-selected)' : (isEndpoint ? '#a78bfa' : 'var(--point-color)');
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Label
+      const real = fracToReal(pt.x, pt.y);
+      ctx.font = '500 10px Inter, sans-serif';
+      ctx.fillStyle = 'var(--text-secondary)';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${real.t.toFixed(2)}s, ${real.angle.toFixed(0)}°`, cx, cy - 14);
+    });
+
+    updateStats(pts, params);
+    updatePointsList(pts, params);
+  }
+
+  function findOriginalIndex(pt) {
+    return state.controlPoints.indexOf(pt);
+  }
+
+  function drawGrid(p, params) {
+    // Vertical lines (time)
+    const tStep = niceStep(params.totalTime, p.w, 80);
+    ctx.strokeStyle = 'var(--grid-line)';
+    ctx.lineWidth = 0.5;
+    for (let t = 0; t <= params.totalTime; t += tStep) {
+      const fx = t / params.totalTime;
+      const cx = p.x + fx * p.w;
+      ctx.beginPath();
+      ctx.moveTo(cx, p.y);
+      ctx.lineTo(cx, p.y + p.h);
+      ctx.stroke();
+    }
+
+    // Horizontal lines (angle)
+    const aStep = niceStep(params.maxAngle, p.h, 50);
+    for (let a = 0; a <= params.maxAngle; a += aStep) {
+      const fy = a / params.maxAngle;
+      const cy = p.y + (1 - fy) * p.h;
+      ctx.beginPath();
+      ctx.moveTo(p.x, cy);
+      ctx.lineTo(p.x + p.w, cy);
+      ctx.stroke();
+    }
+  }
+
+  function drawAxes(p, params) {
+    ctx.strokeStyle = 'var(--border)';
+    ctx.lineWidth = 1;
+
+    // Left axis
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x, p.y + p.h);
+    ctx.stroke();
+
+    // Bottom axis
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y + p.h);
+    ctx.lineTo(p.x + p.w, p.y + p.h);
+    ctx.stroke();
+
+    // Time labels
+    ctx.font = '400 11px Inter, sans-serif';
+    ctx.fillStyle = 'var(--text-muted)';
+    ctx.textAlign = 'center';
+    const tStep = niceStep(params.totalTime, p.w, 80);
+    for (let t = 0; t <= params.totalTime + 0.0001; t += tStep) {
+      const cx = p.x + (t / params.totalTime) * p.w;
+      ctx.fillText(t.toFixed(2) + 's', cx, p.y + p.h + 20);
+    }
+
+    // Angle labels
+    ctx.textAlign = 'right';
+    const aStep = niceStep(params.maxAngle, p.h, 50);
+    for (let a = 0; a <= params.maxAngle + 0.0001; a += aStep) {
+      const cy = p.y + (1 - a / params.maxAngle) * p.h;
+      ctx.fillText(a.toFixed(0) + '°', p.x - 10, cy + 4);
+    }
+
+    // Axis titles
+    ctx.font = '500 12px Inter, sans-serif';
+    ctx.fillStyle = 'var(--text-secondary)';
+    ctx.textAlign = 'center';
+    ctx.fillText('Time', p.x + p.w / 2, p.y + p.h + 42);
+
+    ctx.save();
+    ctx.translate(16, p.y + p.h / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Angle (°)', 0, 0);
+    ctx.restore();
+  }
+
+  function drawCurve(spline, p) {
+    if (spline.length < 2) return;
+
+    ctx.beginPath();
+    const start = fracToCanvas(spline[0].x, spline[0].y);
+    ctx.moveTo(start.cx, start.cy);
+
+    for (let i = 1; i < spline.length; i++) {
+      const { cx, cy } = fracToCanvas(spline[i].x, spline[i].y);
+      ctx.lineTo(cx, cy);
+    }
+
+    ctx.strokeStyle = 'var(--curve-color)';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = 'rgba(59,130,246,0.3)';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Fill under curve
+    const lastPt = fracToCanvas(spline[spline.length - 1].x, spline[spline.length - 1].y);
+    ctx.lineTo(lastPt.cx, p.y + p.h);
+    const firstPt = fracToCanvas(spline[0].x, spline[0].y);
+    ctx.lineTo(firstPt.cx, p.y + p.h);
+    ctx.closePath();
+
+    const grad = ctx.createLinearGradient(0, p.y, 0, p.y + p.h);
+    grad.addColorStop(0, 'rgba(59,130,246,0.08)');
+    grad.addColorStop(1, 'rgba(59,130,246,0.01)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  function drawVelocityCurve(spline, p, params) {
+    if (spline.length < 3) return;
+
+    // Compute velocity (derivative) in steps/s
+    const velocities = [];
+    let maxVel = 0;
+    for (let i = 1; i < spline.length; i++) {
+      const dAngle = (spline[i].y - spline[i - 1].y) * params.maxAngle;
+      const dTime = (spline[i].x - spline[i - 1].x) * params.totalTime;
+      const dSteps = (dAngle / 360) * params.stepsPerRev;
+      const vel = dTime > 0 ? Math.abs(dSteps / dTime) : 0;
+      velocities.push({
+        x: (spline[i].x + spline[i - 1].x) / 2,
+        vel: vel,
+      });
+      maxVel = Math.max(maxVel, vel);
+    }
+
+    if (maxVel === 0) return;
+
+    // Draw velocity on the right axis
+    ctx.strokeStyle = 'var(--velocity-color)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.globalAlpha = 0.7;
+
+    ctx.beginPath();
+    let started = false;
+    for (const v of velocities) {
+      const cx = p.x + v.x * p.w;
+      const cy = p.y + (1 - v.vel / maxVel) * p.h;
+      if (!started) { ctx.moveTo(cx, cy); started = true; }
+      else ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    // Right axis velocity labels
+    ctx.font = '400 10px Inter, sans-serif';
+    ctx.fillStyle = 'var(--velocity-color)';
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = 0.7;
+    const vStep = niceStep(maxVel, p.h, 50);
+    for (let v = 0; v <= maxVel; v += vStep) {
+      const cy = p.y + (1 - v / maxVel) * p.h;
+      ctx.fillText(v.toFixed(0) + ' st/s', p.x + p.w + 6, cy + 3);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function niceStep(range, pixels, minSpacingPx) {
+    const approxCount = Math.max(1, Math.floor(pixels / minSpacingPx));
+    const rawStep = range / approxCount;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const normalized = rawStep / magnitude;
+    let niceNorm;
+    if (normalized <= 1) niceNorm = 1;
+    else if (normalized <= 2) niceNorm = 2;
+    else if (normalized <= 5) niceNorm = 5;
+    else niceNorm = 10;
+    return niceNorm * magnitude;
+  }
+
+  // ---- STATS ----
+  function updateStats(sortedPts, params) {
+    document.getElementById('statPoints').textContent = sortedPts.length;
+    const totalSamples = sortedPts.length >= 2
+      ? Math.ceil(params.totalTime / params.dt) + 1
+      : 0;
+    document.getElementById('statSegments').textContent = totalSamples.toLocaleString();
+
+    // Compute max velocity
+    if (sortedPts.length >= 2) {
+      const spline = evaluateSpline(sortedPts, 400);
+      let maxV = 0;
+      for (let i = 1; i < spline.length; i++) {
+        const dA = (spline[i].y - spline[i - 1].y) * params.maxAngle;
+        const dT = (spline[i].x - spline[i - 1].x) * params.totalTime;
+        const dS = (dA / 360) * params.stepsPerRev;
+        const v = dT > 0 ? Math.abs(dS / dT) : 0;
+        maxV = Math.max(maxV, v);
+      }
+      document.getElementById('statMaxVel').textContent = maxV.toFixed(0) + ' st/s';
+    } else {
+      document.getElementById('statMaxVel').textContent = '—';
+    }
+  }
+
+  // ---- POINTS LIST ----
+  function updatePointsList(sortedPts, params) {
+    pointsList.innerHTML = '';
+    sortedPts.forEach((pt) => {
+      const real = fracToReal(pt.x, pt.y);
+      const idx = findOriginalIndex(pt);
+      const div = document.createElement('div');
+      div.className = 'point-item';
+      div.innerHTML = `
+        <span>t=${real.t.toFixed(3)}s &nbsp; θ=${real.angle.toFixed(1)}°</span>
+        <button class="delete-pt" data-idx="${idx}" title="Delete point">✕</button>
+      `;
+      div.querySelector('.delete-pt').addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.controlPoints.splice(idx, 1);
+        draw();
+      });
+      pointsList.appendChild(div);
+    });
+  }
+
+  // ---- SORTED POINTS ----
+  function getSortedPoints() {
+    return [...state.controlPoints].sort((a, b) => a.x - b.x);
+  }
+
+  // ---- HIT TEST ----
+  function hitTestPoint(mx, my) {
+    const dpr = window.devicePixelRatio || 1;
+    for (let i = 0; i < state.controlPoints.length; i++) {
+      const pt = state.controlPoints[i];
+      const { cx, cy } = fracToCanvas(pt.x, pt.y);
+      const dist = Math.hypot(mx - cx, my - cy);
+      if (dist < 12) return i;
+    }
+    return -1;
+  }
+
+  function getMousePos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      mx: e.clientX - rect.left,
+      my: e.clientY - rect.top,
+    };
+  }
+
+  // ---- SNAP ----
+  function snapFrac(fx, fy) {
+    if (!chkSnap.checked) return { fx, fy };
+    const params = getParams();
+    const tSnapInterval = niceStep(params.totalTime, getPlotArea().w, 80);
+    const aSnapInterval = niceStep(params.maxAngle, getPlotArea().h, 50);
+
+    const tSnapped = Math.round((fx * params.totalTime) / tSnapInterval) * tSnapInterval;
+    const aSnapped = Math.round((fy * params.maxAngle) / aSnapInterval) * aSnapInterval;
+
+    return {
+      fx: tSnapped / params.totalTime,
+      fy: aSnapped / params.maxAngle,
+    };
+  }
+
+  // ---- MOUSE EVENTS ----
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 2) return; // right click handled in contextmenu
+    const { mx, my } = getMousePos(e);
+    const hitIdx = hitTestPoint(mx, my);
+
+    if (hitIdx >= 0) {
+      state.dragging = hitIdx;
+      canvas.style.cursor = 'grabbing';
+    } else {
+      // Add new point
+      const p = getPlotArea();
+      if (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h) {
+        let { fx, fy } = canvasToFrac(mx, my);
+        ({ fx, fy } = snapFrac(fx, fy));
+        fx = Math.max(0, Math.min(1, fx));
+        fy = Math.max(0, Math.min(1, fy));
+        state.controlPoints.push({ x: fx, y: fy });
+        state.dragging = state.controlPoints.length - 1;
+        canvas.style.cursor = 'grabbing';
+        draw();
+      }
+    }
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    const { mx, my } = getMousePos(e);
+
+    if (state.dragging !== null && state.dragging >= 0) {
+      let { fx, fy } = canvasToFrac(mx, my);
+      ({ fx, fy } = snapFrac(fx, fy));
+      fx = Math.max(0, Math.min(1, fx));
+      fy = Math.max(0, Math.min(1, fy));
+      state.controlPoints[state.dragging].x = fx;
+      state.controlPoints[state.dragging].y = fy;
+      draw();
+    }
+
+    // Hover detection
+    const hitIdx = hitTestPoint(mx, my);
+    if (hitIdx >= 0 && state.dragging === null) {
+      canvas.style.cursor = 'grab';
+      state.hovered = hitIdx;
+    } else if (state.dragging === null) {
+      const p = getPlotArea();
+      canvas.style.cursor = (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h)
+        ? 'crosshair' : 'default';
+      state.hovered = null;
+    }
+
+    // Coords display
+    const { fx, fy } = canvasToFrac(mx, my);
+    if (fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1) {
+      const real = fracToReal(fx, fy);
+      coordsDisplay.textContent = `t: ${real.t.toFixed(3)}s | angle: ${real.angle.toFixed(1)}°`;
+    } else {
+      coordsDisplay.textContent = 't: — | angle: —';
+    }
+
+    draw();
+  });
+
+  canvas.addEventListener('mouseup', () => {
+    state.dragging = null;
+    canvas.style.cursor = 'crosshair';
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    state.dragging = null;
+    state.hovered = null;
+    canvas.style.cursor = 'crosshair';
+    draw();
+  });
+
+  // Right-click to delete
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const { mx, my } = getMousePos(e);
+    const hitIdx = hitTestPoint(mx, my);
+    if (hitIdx >= 0) {
+      state.controlPoints.splice(hitIdx, 1);
+      state.dragging = null;
+      state.hovered = null;
+      draw();
+    }
+  });
+
+  // ---- EXPORT ----
+  function generateTrajectory() {
+    const params = getParams();
+    const pts = getSortedPoints();
+    if (pts.length < 2) return [];
+
+    const spline = evaluateSpline(pts, Math.max(500, Math.ceil(params.totalTime / params.dt)));
+    const trajectory = [];
+
+    // Resample at uniform dt
+    for (let t = 0; t <= params.totalTime + params.dt * 0.5; t += params.dt) {
+      const frac = t / params.totalTime;
+      // Find the two spline points that bracket this fraction
+      let lo = 0, hi = spline.length - 1;
+      for (let i = 0; i < spline.length - 1; i++) {
+        if (spline[i].x <= frac && spline[i + 1].x >= frac) {
+          lo = i; hi = i + 1; break;
+        }
+      }
+      // Lerp between the two
+      const sLo = spline[lo], sHi = spline[hi];
+      const localT = (sHi.x - sLo.x) > 0 ? (frac - sLo.x) / (sHi.x - sLo.x) : 0;
+      const angleFrac = sLo.y + localT * (sHi.y - sLo.y);
+      const angleDeg = angleFrac * params.maxAngle;
+      const steps = Math.round((angleDeg / 360) * params.stepsPerRev);
+
+      trajectory.push([parseFloat(t.toFixed(6)), steps]);
+    }
+
+    // Ensure final point
+    const totalSteps = Math.round((pts[pts.length - 1].y * params.maxAngle / 360) * params.stepsPerRev);
+    if (trajectory.length > 0) {
+      trajectory[trajectory.length - 1][1] = totalSteps;
+    }
+
+    return trajectory;
+  }
+
+  document.getElementById('btnExport').addEventListener('click', async () => {
+    const trajectory = generateTrajectory();
+    if (trajectory.length === 0) {
+      showToast('Add at least 2 control points first', true);
+      return;
+    }
+
+    // Determine the server origin: use current origin if served by spline_test.py,
+    // otherwise fall back to localhost:8742
+    const serverUrl = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
+      ? window.location.origin + '/trajectory'
+      : 'http://127.0.0.1:8742/trajectory';
+
+    try {
+      const resp = await fetch(serverUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(trajectory),
+      });
+      if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+      const result = await resp.json();
+      showToast(`Sent ${result.points.toLocaleString()} points — motor executing!`);
+      // Disable button to prevent double-send
+      const btn = document.getElementById('btnExport');
+      btn.disabled = true;
+      btn.textContent = '✓ Sent';
+      btn.style.opacity = '0.5';
+    } catch (err) {
+      showToast('Failed to send: is spline_test.py running? ' + err.message, true);
+    }
+  });
+
+  // ---- CLEAR ----
+  document.getElementById('btnClear').addEventListener('click', () => {
+    state.controlPoints = [];
+    state.dragging = null;
+    state.hovered = null;
+    draw();
+  });
+
+  // ---- PRESET: TRAPEZOID ----
+  document.getElementById('btnPreset').addEventListener('click', () => {
+    state.controlPoints = [
+      { x: 0, y: 0 },
+      { x: 1/3, y: 0.333 },
+      { x: 2/3, y: 0.666 },
+      { x: 1, y: 1 },
+    ];
+    state.dragging = null;
+    state.hovered = null;
+    draw();
+    showToast('Loaded trapezoidal preset');
+  });
+
+  // ---- TOAST ----
+  function showToast(msg, isError = false) {
+    toast.textContent = msg;
+    toast.style.borderColor = isError ? 'var(--danger)' : 'var(--success)';
+    toast.style.color = isError ? 'var(--danger)' : 'var(--success)';
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2500);
+  }
+
+  // ---- PARAM CHANGE LISTENERS ----
+  [inputTime, inputAngle, inputDt, inputSteps].forEach(el =>
+    el.addEventListener('input', () => draw())
+  );
+  [chkVelocity, chkGrid, chkSnap].forEach(el =>
+    el.addEventListener('change', () => draw())
+  );
+
+  // ---- INIT ----
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // Start with a default trapezoidal shape
+  state.controlPoints = [
+    { x: 0, y: 0 },
+    { x: 1/3, y: 0.333 },
+    { x: 2/3, y: 0.666 },
+    { x: 1, y: 1 },
+  ];
+  draw();
+})();
+  </script>
+</body>
+
+</html>
