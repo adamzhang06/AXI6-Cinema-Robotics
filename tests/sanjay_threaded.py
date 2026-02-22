@@ -58,10 +58,10 @@ tilt_angle = float(input("Enter Tilt angle in degrees (e.g., 0): "))
 target_time = float(input("Enter total move time in seconds (e.g., 5.0): "))
 
 # Differential Math
-# Motor A = Pan + Tilt
-# Motor B = Pan - Tilt
-motor_a_angle = pan_angle + tilt_angle
-motor_b_angle = pan_angle - tilt_angle
+# Motor A = Tilt + Pan
+# Motor B = Tilt - Pan
+motor_a_angle = tilt_angle + pan_angle
+motor_b_angle = tilt_angle - pan_angle
 
 steps_per_rev = 400
 a_steps_float = abs((motor_a_angle / 360.0) * steps_per_rev)
