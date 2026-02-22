@@ -57,7 +57,7 @@ cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
 cv2.resizeWindow(WINDOW, 600, 350)
 
 cv2.createTrackbar("Speed", WINDOW, 0, 500, lambda x: None)
-cv2.createTrackbar("Direction", WINDOW, 1, 2, lambda x: None)  # 0=Rev, 1=Stop, 2=Fwd
+cv2.createTrackbar("Direction", WINDOW, 2, 2, lambda x: None)  # 0=Rev, 1=Stop, 2=Fwd
 cv2.createTrackbar("Accel", WINDOW, 400, 2000, lambda x: None)
 
 SEND_HZ = 100

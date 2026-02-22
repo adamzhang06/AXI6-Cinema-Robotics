@@ -31,8 +31,8 @@ def main():
     )
     
     # Set the Acceleration and maximal Speed in fullsteps
-    tmc.acceleration_fullstep = 1000
-    tmc.max_speed_fullstep = 250
+    tmc.acceleration_fullstep = 2000
+    tmc.max_speed_fullstep = 1000
 
     # Activate the motor current output
     tmc.set_motor_enabled(True)
