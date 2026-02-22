@@ -15,14 +15,14 @@ def execute_move(tmc, theta, duration, easing):
     
     theta:    angle in degrees (negative = reverse)
     duration: time in seconds
-    easing:   1-100 (1 = sharp, 100 = smooth)
+    easing:   1 - 100 (1 = sharp, 100 = smooth)
     """
     # Convert degrees to steps
     steps = int(theta * STEPS_PER_REV / 360)
 
     # Calculate speed and acceleration
-    max_speed = abs(steps) / duration
-    accel = (max_speed) / (duration * (easing / 100))
+    max_speed = (abs(steps) / duration) * 2 * (easing / 100)
+    accel = (2 * max_speed) / (duration * (easing / 100))
 
     # Clamp to integers (driver needs ints)
     max_speed = max(int(max_speed), 1)
