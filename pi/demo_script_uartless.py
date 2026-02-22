@@ -22,7 +22,7 @@ def execute_move(tmc, theta, duration, easing):
     v_max = (steps / duration) * (easing / (easing - 1))
     a_max = (v_max / duration) * easing
 
-    print(f"  θ={theta}° → {target_steps} steps | speed={max_speed_full:.2f} | accel={accel_full:.2f} | time={duration}s | ease={easing}%")
+    # print(f"  θ={theta}° → {target_steps} steps | speed={max_speed_full:.2f} | accel={accel_full:.2f} | time={duration}s | ease={easing}%")
 
     # The library accepts floats for these properties
     tmc.acceleration_fullstep = a_max
