@@ -214,12 +214,11 @@ print("[MOTOR] Enabled\n")
 REG_VACTUAL = 0x22
 
 def fast_set_vactual(velocity):
-    """Write VACTUAL using the library's own UART — bypasses motion control delay."""
-    # Handle signed: VACTUAL is 24-bit signed
+    """Write VACTUAL using library UART — write only, no slow read-back."""
     if velocity < 0:
         velocity = (1 << 24) + velocity
     val = velocity & 0xFFFFFF
-    tmc.tmc_com.write_reg_check(REG_VACTUAL, val)
+    tmc.tmc_com.write_reg(REG_VACTUAL, val)  # write_reg = instant, write_reg_check = slow
 
 # ==================== TRAJECTORY EXECUTION ====================
 def run_trajectory(waypoints):
