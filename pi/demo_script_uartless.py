@@ -11,39 +11,24 @@ STEPS_PER_REV = 1600  # Steps for 360 degrees
 
 def execute_move(tmc, theta, duration, easing):
     """
-    Calculate and execute a move that completes in exactly `duration` seconds.
+    Calculate and execute a move with easing.
     
     theta:    angle in degrees (negative = reverse)
     duration: time in seconds
-    easing:   1-100 (1 = sharp/instant ramp, 100 = full triangular ease)
-    
-    Uses trapezoidal velocity profile:
-      - easing% of time is spent accelerating + decelerating
-      - remaining time is at constant speed
-      - e=100% → pure triangle (all accel/decel, no constant phase)
-      - e=1%   → nearly instant ramp to constant speed
+    easing:   1-100 (1 = sharp, 100 = smooth)
     """
     # Convert degrees to steps
     steps = int(theta * STEPS_PER_REV / 360)
-    abs_steps = abs(steps)
 
-    # easing as fraction (0.01 to 1.0)
-    e = easing / 100.0
-
-    # Trapezoidal profile math:
-    # max_speed = abs_steps / (duration * (1 - e/2))
-    # accel = 2 * max_speed / (e * duration)
-    max_speed = abs_steps / (duration * (1.0 - e / 2.0))
-    accel = (2.0 * max_speed) / (e * duration)
+    # Calculate speed and acceleration
+    max_speed = abs(steps) / duration
+    accel = (max_speed) / (2 * duration * (easing / 100))
 
     # Clamp to integers (driver needs ints)
     max_speed = max(int(max_speed), 1)
     accel = max(int(accel), 1)
 
-    t_ramp = e * duration
-    t_const = duration - t_ramp
-    print(f"  θ={theta}° → {steps} steps | speed={max_speed} | accel={accel}")
-    print(f"  ramp: {t_ramp/2:.2f}s up + {t_const:.2f}s cruise + {t_ramp/2:.2f}s down = {duration}s")
+    print(f"  θ={theta}° → {steps} steps | speed={max_speed} | accel={accel} | time={duration}s | ease={easing}%")
 
     tmc.acceleration_fullstep = accel
     tmc.max_speed_fullstep = max_speed
