@@ -100,10 +100,7 @@ GPIO.output(TILT_DIR, GPIO.LOW if b_direction_forward else GPIO.HIGH) # Inverted
 # -----------------------------------------------------------------------
 # 5. Thread Execution Engine
 # -----------------------------------------------------------------------
-# We freeze the start time so both threads trigger off the exact same clock
-start_time_real = time.time() + 0.5  # Give threads 500ms to spin up
-
-def motor_pulse_loop(step_pin, times_array):
+def motor_pulse_loop(step_pin, times_array, start_time_real):
     """The exact sanjay.py logic running inside a dedicated thread"""
     for target_t in times_array:
         # Busy-wait loop for microsecond precision against the global clock
@@ -112,25 +109,52 @@ def motor_pulse_loop(step_pin, times_array):
             
         # Fire pulse
         GPIO.output(step_pin, GPIO.HIGH)
-        time.sleep(0.00001) # 1 microsecond hold
+        time.sleep(0.0000001) # 1 microsecond hold
         GPIO.output(step_pin, GPIO.LOW)
 
+print("Starting infinite playback loop. Press Ctrl+C to stop.")
 
-print("Launching parallel threads...")
+try:
+    while True:
+        # --- FORWARD PASS ---
+        print("\nMoving Forward...")
+        GPIO.output(PAN_DIR, GPIO.HIGH if a_direction_forward else GPIO.LOW)
+        GPIO.output(TILT_DIR, GPIO.LOW if b_direction_forward else GPIO.HIGH) # Inverted
+        
+        start_time_real = time.time() + 0.1  # 100ms sync buffer
+        
+        pan_thread = threading.Thread(target=motor_pulse_loop, args=(PAN_STEP, a_step_times, start_time_real))
+        tilt_thread = threading.Thread(target=motor_pulse_loop, args=(TILT_STEP, b_step_times, start_time_real))
+        
+        pan_thread.start()
+        tilt_thread.start()
+        pan_thread.join()
+        tilt_thread.join()
+        
+        print("Forward move complete. Waiting 1 second...")
+        time.sleep(1.0)
+        
+        # --- BACKWARD PASS (Return to Start) ---
+        print("Moving Backward...")
+        # Flip the direction logic
+        GPIO.output(PAN_DIR, GPIO.LOW if a_direction_forward else GPIO.HIGH)
+        GPIO.output(TILT_DIR, GPIO.HIGH if b_direction_forward else GPIO.LOW) # Inverted
+        
+        start_time_real = time.time() + 0.1  # 100ms sync buffer
+        
+        pan_thread = threading.Thread(target=motor_pulse_loop, args=(PAN_STEP, a_step_times, start_time_real))
+        tilt_thread = threading.Thread(target=motor_pulse_loop, args=(TILT_STEP, b_step_times, start_time_real))
+        
+        pan_thread.start()
+        tilt_thread.start()
+        pan_thread.join()
+        tilt_thread.join()
 
-# Create python threads pointing to our GPIO loop
-pan_thread = threading.Thread(target=motor_pulse_loop, args=(PAN_STEP, a_step_times))
-tilt_thread = threading.Thread(target=motor_pulse_loop, args=(TILT_STEP, b_step_times))
+        print("Backward move complete. Waiting 1 second...")
+        time.sleep(1.0)
 
-pan_thread.start()
-tilt_thread.start()
-
-# Wait for both to finish
-pan_thread.join()
-tilt_thread.join()
-
-actual_time = time.time() - start_time_real
-print(f"Dual-Move complete. Expected time: {target_time}s | Actual time: {actual_time:.3f}s")
+except KeyboardInterrupt:
+    print("\n[STOP] Loop interrupted by user.")
 
 # -----------------------------------------------------------------------
 # Clean up
