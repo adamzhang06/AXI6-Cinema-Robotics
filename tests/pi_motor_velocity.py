@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-Motor Velocity Ramp Test (Pi-side / Terminal Only)
-===================================================
-Sends a linear velocity ramp to the Pi via UDP.
-No GUI — pure terminal output. Runs on Pi or Mac.
+Motor Velocity Test Server (Pi-side)
+======================================
+Standalone motor server for velocity testing.
+Listens for UDP commands in the same format as pi_motor_server.py.
 
-Usage:
-  1. Start pi_motor_server.py on the Pi
-  2. Run: python tests/pi_motor_velocity.py
+Run on Pi:  python tests/pi_motor_velocity.py
+Then run motor_velocity.py on Mac to control speed.
 
 Press Ctrl+C to stop.
 """
@@ -15,84 +14,113 @@ Press Ctrl+C to stop.
 import socket
 import json
 import time
+import threading
+from tmc_driver import Tmc2209, Loglevel, MovementAbsRel, TmcEnableControlPin, TmcMotionControlStepDir
 
-# ==================== NETWORK SETUP ====================
+# --- NETWORK ---
+UDP_IP = "0.0.0.0"
+UDP_PORT = 5005
 BEACON_PORT = 5006
-PI_PORT = 5005
 
-def discover_pi(timeout=2):
-    print(f"[NETWORK] Searching for Pi motor server...")
+class MotorState:
+    def __init__(self):
+        self.speed = 0
+        self.dir = 0
+        self.accel = 400
+        self.last_update = time.time()
+        self.running = True
+
+state = MotorState()
+
+# --- UDP LISTENER ---
+def udp_listener():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(('', BEACON_PORT))
-    sock.settimeout(timeout)
-    try:
-        data, addr = sock.recvfrom(1024)
-        msg = json.loads(data.decode('utf-8'))
-        if msg.get('service') == 'axi6_motor_server':
-            pi_ip = addr[0]
-            pi_port = msg.get('port', PI_PORT)
-            print(f"[NETWORK] ✅ Found Pi at {pi_ip}:{pi_port}")
-            sock.close()
-            return pi_ip, pi_port
-    except socket.timeout:
-        print(f"[NETWORK] ❌ No Pi found. Using fallback IP.")
-        sock.close()
-        return "10.186.143.105", PI_PORT
-    sock.close()
-    return None, PI_PORT
+    sock.bind((UDP_IP, UDP_PORT))
+    sock.settimeout(1.0)
+    print(f"[NETWORK] Listening on port {UDP_PORT}...")
 
-PI_IP, PI_PORT = discover_pi()
-udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    while state.running:
+        try:
+            data, addr = sock.recvfrom(1024)
+            command = json.loads(data.decode('utf-8'))
 
-# ==================== CONFIGURATION ====================
-STEP_SIZE   = 1          # Direction (1 = forward, -1 = reverse)
-ACCEL       = 400        # Motor acceleration
-RAMP_RATE   = 50         # Speed increase per second
-MAX_SPEED   = 500        # Safety cap
-SEND_HZ     = 100        # UDP send rate
+            if "pan" in command:
+                state.speed = command["pan"].get("speed", 0)
+                state.dir   = command["pan"].get("dir", 0)
+                state.accel = command["pan"].get("accel", 400)
 
-# ==================== HELPERS ====================
-def send_command(speed, direction, accel):
-    payload = json.dumps({
-        "slide": {"speed": 0, "dir": 0, "accel": 400},
-        "pan":   {"speed": int(speed), "dir": direction, "accel": accel},
-        "tilt":  {"speed": 0, "dir": 0, "accel": 400}
-    })
-    udp_sock.sendto(payload.encode('utf-8'), (PI_IP, PI_PORT))
+            state.last_update = time.time()
+        except socket.timeout:
+            pass
+        except Exception:
+            pass
 
-# ==================== RAMP ====================
-print(f"\n{'=' * 50}")
-print(f"  Motor Velocity Ramp Test")
-print(f"  Target: {PI_IP}:{PI_PORT}")
-print(f"  Ramp: {RAMP_RATE} vel/s | Max: {MAX_SPEED} | Dir: {STEP_SIZE:+d}")
-print(f"  Press Ctrl+C to stop.")
-print(f"{'=' * 50}\n")
+# --- BEACON BROADCASTER ---
+def beacon_broadcaster():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    print(f"[BEACON] Broadcasting on port {BEACON_PORT}...")
+    while state.running:
+        try:
+            beacon = json.dumps({"service": "axi6_motor_server", "port": UDP_PORT}).encode('utf-8')
+            sock.sendto(beacon, ('<broadcast>', BEACON_PORT))
+        except Exception:
+            pass
+        time.sleep(2)
 
-start_time = time.time()
-loop_period = 1.0 / SEND_HZ
-current_speed = 0
+# --- MOTOR LOOP ---
+def motor_loop():
+    pan_motor = Tmc2209(TmcEnableControlPin(21), TmcMotionControlStepDir(16, 20), loglevel=Loglevel.INFO)
+    pan_motor.acceleration_fullstep = 400
+    pan_motor.set_motor_enabled(True)
 
-try:
-    while True:
-        loop_start = time.time()
-        elapsed = loop_start - start_time
+    print("[MOTOR] Ready. Waiting for commands...")
 
-        current_speed = min(int(elapsed * RAMP_RATE), MAX_SPEED)
+    while state.running:
+        start_time = time.time()
 
-        send_command(current_speed, STEP_SIZE, ACCEL)
+        # Failsafe: no packets for 0.5s → stop
+        if time.time() - state.last_update > 0.5:
+            pan_motor.max_speed_fullstep = 0
+        else:
+            # Update acceleration
+            if state.accel > 0 and pan_motor.acceleration_fullstep != state.accel:
+                pan_motor.acceleration_fullstep = state.accel
 
-        bar_len = current_speed // 10
-        bar = "#" * bar_len + "." * (50 - bar_len)
-        print(f"\r  {elapsed:5.1f}s |{bar}| {current_speed:4d}", end="", flush=True)
+            # Update speed
+            pan_motor.max_speed_fullstep = state.speed
 
-        sleep_time = loop_period - (time.time() - loop_start)
+            # Fire step chunk
+            if state.speed > 0 and state.dir != 0:
+                steps = state.dir * 10
+                pan_motor.run_to_position_steps(steps, MovementAbsRel.RELATIVE)
+
+            # Print status every ~1 second
+            if int(time.time() * 2) % 2 == 0 and int(start_time * 2) % 2 != 0:
+                print(f"  Speed: {state.speed:4d} | Dir: {state.dir:+d} | Accel: {state.accel}")
+
+        # 500Hz loop
+        sleep_time = 0.002 - (time.time() - start_time)
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-except KeyboardInterrupt:
-    print(f"\n\n[STOP] Final speed: {current_speed}")
+    pan_motor.set_motor_enabled(False)
+    print("\n[SHUTDOWN] Motor disabled.")
 
-finally:
-    send_command(0, 0, ACCEL)
-    print("[SHUTDOWN] Stop command sent to Pi.")
+if __name__ == "__main__":
+    print("\n" + "=" * 50)
+    print("  AXI6 Motor Velocity Test Server")
+    print(f"  Listening on {UDP_IP}:{UDP_PORT}")
+    print("  Press Ctrl+C to stop.")
+    print("=" * 50 + "\n")
+
+    net_thread = threading.Thread(target=udp_listener, daemon=True)
+    net_thread.start()
+
+    beacon_thread = threading.Thread(target=beacon_broadcaster, daemon=True)
+    beacon_thread.start()
+
+    try:
+        motor_loop()
+    except KeyboardInterrupt:
+        state.running = False
