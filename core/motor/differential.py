@@ -10,7 +10,8 @@ using busy-wait precision.
 
 import time
 import threading
-from typing import List, Tuple
+from typing import List
+import RPi.GPIO as GPIO
 from .axis import Axis
 
 
@@ -18,8 +19,8 @@ class DifferentialDrive:
     """
     Two-DOF differential drive executor.
 
-    Pan  = (A + B) / 2
-    Tilt = (A - B) / 2
+    Motor A = Pan + Tilt
+    Motor B = Pan - Tilt
     """
 
     def __init__(
@@ -46,30 +47,17 @@ class DifferentialDrive:
         
         print(f"[MOTOR] Executing A: {len(motor_a_times)} steps | B: {len(motor_b_times)} steps")
 
-        # Start execution baseline time
-        start_time = time.time()
-
-        def run_motor(axis: Axis, times: List[float]):
-            p = axis.step_pin
-            for t in times:
-                while time.time() - start_time < t:
-                    pass
-                axis.driver.tmc_gpio.output(p, 1) # Bypass python GIL overhead if using native
-                # For pure GPIO:
-                # import RPi.GPIO as GPIO
-                # GPIO.output(p, GPIO.HIGH)
-                # time.sleep(0.000001)
-                # GPIO.output(p, GPIO.LOW)
+        # Start execution baseline time, freeze time clock for threads
+        start_time = time.time() + 0.1  # Give 100ms for thread spin-up sync
 
         # Threading wrapper for pure GPIO execution
         def run_gpio(axis: Axis, times: List[float]):
-            import RPi.GPIO as GPIO
             p = axis.step_pin
             for t in times:
                 while time.time() - start_time < t:
                     pass
                 GPIO.output(p, GPIO.HIGH)
-                time.sleep(0.000001)
+                time.sleep(0.0000001) # 0.1 microsecond
                 GPIO.output(p, GPIO.LOW)
 
         t_a = threading.Thread(target=run_gpio, args=(self.axis_a, motor_a_times))

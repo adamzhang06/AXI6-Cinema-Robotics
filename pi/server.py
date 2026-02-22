@@ -16,7 +16,6 @@ import threading
 import sys
 sys.path.insert(0, "/home/pi/AXI6")   # adjust to your Pi path
 
-from tmc_driver import Tmc2209, Loglevel, TmcEnableControlPin, TmcMotionControlStepDir
 from core.motor.axis import Axis
 from core.motor.differential import DifferentialDrive
 from core.motion.spline import SplineInterpolator
@@ -29,22 +28,10 @@ running = True
 
 
 # ─ Hardware Init ──────────────────────────────────────────────────────────────
-# Ensure UART_PORT logic from your multiple driver demo is applied if needed,
-# but for Sanjays GPIO we only use the library for EN pins.
-driver_a = Tmc2209(
-    TmcEnableControlPin(21),
-    TmcMotionControlStepDir(16, 20),
-    loglevel=Loglevel.INFO,
-)
-driver_b = Tmc2209(
-    TmcEnableControlPin(26),
-    TmcMotionControlStepDir(13, 19),
-    loglevel=Loglevel.INFO,
-)
-
-# Axis(driver, step_pin, dir_pin, invert)
-axis_a = Axis(driver_a, step_pin=16, dir_pin=20)
-axis_b = Axis(driver_b, step_pin=13, dir_pin=19, invert=True)
+# We use pure RPi.GPIO (configured inside Axis) for precise step timing
+# Axis(en_pin, step_pin, dir_pin, invert)
+axis_a = Axis(en_pin=21, step_pin=16, dir_pin=20)
+axis_b = Axis(en_pin=26, step_pin=13, dir_pin=19, invert=True)
 
 drive = DifferentialDrive(axis_a, axis_b)
 
