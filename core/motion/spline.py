@@ -109,3 +109,45 @@ class SplineInterpolator:
             cp_in  = ((t1 - dt / 3), v1 - slope_in)
             handles.append((cp_out, cp_in))
         return handles
+
+
+
+def generate_step_times(spline_data) -> tuple[bool, list[float]]:
+    """
+    Given an array of absolute positional targets [t, expected_pos_steps],
+    convert it into an array of exact times that every single motor step should occur at.
+    """
+    if len(spline_data) < 2:
+        return True, []
+        
+    times = []
+    # Total distance dictates direction 
+    total_dp = spline_data[-1][1] - spline_data[0][1]
+    direction_is_forward = (total_dp >= 0)
+    
+    current_step_target = spline_data[0][1]
+    step_increment = 1.0 if direction_is_forward else -1.0
+    
+    # Simple linear interpolation across the spline segments to find exact time for each step boundary.
+    for i in range(1, len(spline_data)):
+        t_prev, p_prev = spline_data[i-1]
+        t_next, p_next = spline_data[i]
+        
+        # If the segment goes forward and our global direction is forward
+        # OR the segment goes backward and our global direction is backward
+        if (p_next > p_prev and direction_is_forward) or (p_next < p_prev and not direction_is_forward):
+            
+            while True:
+                next_step = current_step_target + step_increment
+                
+                # Check if this next discrete integer step falls within the current segment
+                if (direction_is_forward and next_step <= p_next) or (not direction_is_forward and next_step >= p_next):
+                    # Linear interpolate to find the exact time this step boundary is crossed
+                    ratio = (next_step - p_prev) / (p_next - p_prev)
+                    exact_t = t_prev + ratio * (t_next - t_prev)
+                    times.append(exact_t)
+                    current_step_target = next_step
+                else:
+                    break
+
+    return direction_is_forward, times

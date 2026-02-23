@@ -8,6 +8,10 @@ import json
 import struct
 import numpy as np
 from ultralytics import YOLO
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from core.motion.spline import generate_step_times
+
 
 
 # --- NETWORK SETUP ---
@@ -451,16 +455,28 @@ while cap.isOpened() and system_state["running"]:
         hz = speed if direction > 0 else -speed if direction < 0 else 0
         return hz * dt
         
+
     s_dp = get_dp("slide") # Slide ignored for now on Pi side, but sent anyway
     p_dp = get_dp("tilt")  # Camera Tilt = Mount Pan
     t_dp = get_dp("pan")   # Camera Pan = Mount Tilt
 
-    # The PI expects [[time, position], ...]
-    # For real-time, we just send a single segment [dt, dp]
+    # Local differential math to offload the Pi
+    # Motor A = Pan + Tilt
+    # Motor B = Pan - Tilt
+    # Since yolo is a 0.1s delta update relative to 0
+    a_spline = [[0.0, 0.0], [dt, p_dp + t_dp]]
+    b_spline = [[0.0, 0.0], [dt, p_dp - t_dp]]
+    
+    a_fwd, a_times = generate_step_times(a_spline)
+    b_fwd, b_times = generate_step_times(b_spline)
+
     payload_dict = {
-        "pan": [[dt, p_dp]],
-        "tilt": [[dt, t_dp]]
+        "a_fwd": a_fwd,
+        "a_times": a_times,
+        "b_fwd": b_fwd,
+        "b_times": b_times
     }
+
     
     # Only transmit if actively engaged (save TCP overhead when locked)
     if actively_sending_input:
@@ -529,8 +545,13 @@ while cap.isOpened() and system_state["running"]:
     elif key == ord(']'): flicker_grace_sec = min(5.0, flicker_grace_sec + 0.1) 
 
 
+
 # Safe Shutdown
-stop_payload = {"pan": [[0.1, 0]], "tilt": [[0.1, 0]]}
+stop_payload = {
+    "a_fwd": True, "a_times": [],
+    "b_fwd": True, "b_times": []
+}
+
 send_trajectory_to_pi(stop_payload)
 
 

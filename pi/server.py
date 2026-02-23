@@ -60,9 +60,9 @@ def beacon_broadcaster():
 
 # ─ TCP Server Setup ───────────────────────────────────────────────────────────
 
+
 def receive_trajectory(conn):
     """Reads a length-prefixed JSON trajectory from a TCP connection."""
-    # Read 4-byte big-endian length header
     length_bytes = b''
     while len(length_bytes) < 4:
         chunk = conn.recv(4 - len(length_bytes))
@@ -72,7 +72,6 @@ def receive_trajectory(conn):
 
     payload_length = struct.unpack('>I', length_bytes)[0]
     
-    # Read the full JSON payload
     payload = b''
     while len(payload) < payload_length:
         chunk = conn.recv(min(4096, payload_length - len(payload)))
@@ -81,67 +80,21 @@ def receive_trajectory(conn):
         payload += chunk
 
     data = json.loads(payload.decode('utf-8'))
+    return data["a_fwd"], data["a_times"], data["b_fwd"], data["b_times"]
+
+
+
+def execute_trajectory(a_fwd, a_times, b_fwd, b_times):
+    """Execution is now just enqueuing the exact timings."""
+    print(f"[MOTOR] Enqueueing differential steps: A({len(a_times)}), B({len(b_times)})")
     
-    pan_spline = data["pan"]
-    tilt_spline = data["tilt"]
-    
-    # If the payload is just a single point [dt, dp] from live tracking,
-    # prepend [0, 0] so generate_times can interpolate a valid segment.
-    if len(pan_spline) == 1:
-        pan_spline.insert(0, [0.0, 0.0])
-    if len(tilt_spline) == 1:
-        tilt_spline.insert(0, [0.0, 0.0])
-        
-    return pan_spline, tilt_spline
-
-
-def generate_times(spline_data) -> tuple[bool, list[float]]:
-    """
-    Given an array of absolute positional targets [t, expected_pos_steps],
-    convert it into an array of exact times that every single motor step should occur at.
-    Mimics calculate_step_times() in sanjay.py but for arbitrary spline geometries.
-    """
-    if len(spline_data) < 2:
-        return True, []
-        
-    times = []
-    # Total distance dictates direction 
-    total_dp = spline_data[-1][1] - spline_data[0][1]
-    direction_is_forward = (total_dp >= 0)
-    
-    current_step_target = spline_data[0][1]
-    step_increment = 1.0 if direction_is_forward else -1.0
-
-    print(f"DEBUG: Processing spline from {spline_data[0]} to {spline_data[-1]}")
-    
-    # Simple linear interpolation across the spline segments to find exact time for each step boundary.
-    for i in range(1, len(spline_data)):
-        t_prev, p_prev = spline_data[i-1]
-        t_next, p_next = spline_data[i]
-        
-        # If the segment goes forward and our global direction is forward
-        # OR the segment goes backward and our global direction is backward
-        if (p_next > p_prev and direction_is_forward) or (p_next < p_prev and not direction_is_forward):
-            
-            while True:
-                next_step = current_step_target + step_increment
-                
-                # Check if this next discrete integer step falls within the current segment
-                if (direction_is_forward and next_step <= p_next) or (not direction_is_forward and next_step >= p_next):
-                    # Linear interpolate to find the exact time this step boundary is crossed
-                    ratio = (next_step - p_prev) / (p_next - p_prev)
-                    exact_t = t_prev + ratio * (t_next - t_prev)
-                    times.append(exact_t)
-                    current_step_target = next_step
-                else:
-                    break
-
-    return direction_is_forward, times
-
-
-def execute_trajectory(pan_spline, tilt_spline):
-    """Converts high level pan/tilt arrays into differential motor steps and fires them."""
-    print(f"[MOTOR] Calculating differential steps...")
+    # Enqueue through the Drive wrapper
+    drive.enqueue_timing(
+        motor_a_forward=a_fwd,
+        motor_a_times=a_times,
+        motor_b_forward=b_fwd,
+        motor_b_times=b_times
+    )
     
     # 1. Splines come in as [t, pan_position] and [t, tilt_position]
     # We must convert Pan/Tilt into Motor_A / Motor_B
@@ -202,11 +155,11 @@ def main():
             print(f"[SERVER] Connected from {addr[0]}:{addr[1]}")
 
             try:
-                pan_spline, tilt_spline = receive_trajectory(conn)
-                print(f"[SERVER] Received Splines: Pan {len(pan_spline)} pts, Tilt {len(tilt_spline)} pts.")
+                a_fwd, a_times, b_fwd, b_times = receive_trajectory(conn)
+                print(f"[SERVER] Received Payload.")
 
                 # Calculate times and block to execute via precision GPIO
-                execute_trajectory(pan_spline, tilt_spline)
+                execute_trajectory(a_fwd, a_times, b_fwd, b_times)
 
                 # Send ACK back to Mac to indicate readiness for the next frame
                 ack = json.dumps({"status": "ok"}).encode('utf-8')

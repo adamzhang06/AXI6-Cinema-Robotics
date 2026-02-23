@@ -14,6 +14,11 @@ import struct
 import os
 import threading
 import webbrowser
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from core.motion.spline import generate_step_times
+
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 # --- NETWORK CONFIG ---
@@ -92,9 +97,9 @@ def send_trajectory_to_pi(trajectory_dict):
     header = struct.pack('>I', len(payload))
     sock.sendall(header + payload)
 
-    pan_len = len(trajectory_dict.get('pan', []))
-    tilt_len = len(trajectory_dict.get('tilt', []))
-    print(f"[NET] Sent {pan_len} pan points & {tilt_len} tilt points ({len(payload)} bytes) to Pi.")
+    
+    
+    print(f"[NET] Sent highly precise step times ({len(payload)} bytes) to Pi.")
 
     # Wait for ACK
     ack_data = sock.recv(4096)
@@ -114,26 +119,48 @@ class SplineHTTPHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=UI_DIR, **kwargs)
 
+
     def do_POST(self):
         if self.path == '/trajectory':
             content_length = int(self.headers['Content-Length'])
             body = self.rfile.read(content_length)
             trajectory_dict = json.loads(body.decode('utf-8'))
             
-            pan_len = len(trajectory_dict.get('pan', []))
-            tilt_len = len(trajectory_dict.get('tilt', []))
-            print(f"[HTTP] Received {pan_len} pan / {tilt_len} tilt pts from browser.")
+            pan_spline = trajectory_dict.get('pan', [])
+            tilt_spline = trajectory_dict.get('tilt', [])
+            print(f"[HTTP] Received {len(pan_spline)} pan / {len(tilt_spline)} tilt pts from browser.")
+
+            # Differential Math on the Mac -> Motor A and B Arrays
+            a_spline = []
+            b_spline = []
+            for i in range(len(pan_spline)):
+                t = pan_spline[i][0]
+                pan_p = pan_spline[i][1]
+                tilt_p = tilt_spline[i][1]
+                a_spline.append((t, pan_p + tilt_p))
+                b_spline.append((t, pan_p - tilt_p))
+                
+            a_fwd, a_times = generate_step_times(a_spline)
+            b_fwd, b_times = generate_step_times(b_spline)
+
+            payload_dict = {
+                "a_fwd": a_fwd,
+                "a_times": a_times,
+                "b_fwd": b_fwd,
+                "b_times": b_times
+            }
 
             # Forward to Pi
             try:
-                ack = send_trajectory_to_pi(trajectory_dict)
+                ack = send_trajectory_to_pi(payload_dict)
+
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({
                     "status": "ok",
-                    "points": pan_len + tilt_len,
+                    "points": len(a_times) + len(b_times),
                     "message": f"Sent to Pi at {pi_ip}"
                 }).encode())
             except Exception as e:
