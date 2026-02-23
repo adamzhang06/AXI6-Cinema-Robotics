@@ -168,8 +168,8 @@ def execute_trajectory(pan_spline, tilt_spline):
     a_fwd, a_times = generate_times(a_spline)
     b_fwd, b_times = generate_times(b_spline)
     
-    # Execute through the Drive wrapper
-    drive.execute_dual_timing(
+    # Enqueue through the Drive wrapper
+    drive.enqueue_timing(
         motor_a_forward=a_fwd,
         motor_a_times=a_times,
         motor_b_forward=b_fwd,
@@ -205,13 +205,13 @@ def main():
                 pan_spline, tilt_spline = receive_trajectory(conn)
                 print(f"[SERVER] Received Splines: Pan {len(pan_spline)} pts, Tilt {len(tilt_spline)} pts.")
 
-                # Send ACK back to Mac
+                # Calculate times and block to execute via precision GPIO
+                execute_trajectory(pan_spline, tilt_spline)
+
+                # Send ACK back to Mac to indicate readiness for the next frame
                 ack = json.dumps({"status": "ok"}).encode('utf-8')
                 conn.sendall(ack)
                 conn.close()
-
-                # Calculate times and block to execute via precision GPIO
-                execute_trajectory(pan_spline, tilt_spline)
                 print("[SERVER] Ready for next trajectory.")
 
             except Exception as e:

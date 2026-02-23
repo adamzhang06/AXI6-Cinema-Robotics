@@ -171,7 +171,7 @@ def main():
 
     # Start HTTP server
     server = HTTPServer(('0.0.0.0', HTTP_PORT), SplineHTTPHandler)
-    editor_url = f"http://127.0.0.1:{HTTP_PORT}/test_spline_editor.html"
+    editor_url = f"http://127.0.0.1:{HTTP_PORT}/spline_editor.html"
 
     print(f"[HTTP] Serving spline editor at {editor_url}")
     print("[HTTP] Design your trajectory, then click 'Send to Motor'.")

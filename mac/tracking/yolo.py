@@ -14,25 +14,42 @@ from ultralytics import YOLO
 PI_IP = "100.69.176.89"  
 PI_PORT = 5010 # Changed to TCP port
 
+# Global state for network thread
+net_thread = None
+
 def send_trajectory_to_pi(trajectory_dict):
     """Connects to the Pi and sends the trajectory dict as length-prefixed JSON."""
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1.0) # Short timeout for real-time tracking
-        
-        # Disable Nagle's algorithm for fast real-time transmission
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        
-        sock.connect((PI_IP, PI_PORT))
-        
-        payload = json.dumps(trajectory_dict).encode('utf-8')
-        header = struct.pack('>I', len(payload))
-        sock.sendall(header + payload)
-        
-        # We don't wait for ACK in real-time tracking to avoid blocking frame processing
-        sock.close()
-    except Exception as e:
-        pass # Ignore dropped frames in tracking
+    global net_thread
+    
+    # If the thread is still alive, the Pi is busy executing the previous trajectory
+    # We simply drop the frame and wait for the Pi to catch up
+    if net_thread is not None and net_thread.is_alive():
+        return
+
+    def worker():
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2.0) # Larger timeout for execution wait
+            
+            # Disable Nagle's algorithm for fast transmission
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            
+            sock.connect((PI_IP, PI_PORT))
+            
+            payload = json.dumps(trajectory_dict).encode('utf-8')
+            header = struct.pack('>I', len(payload))
+            sock.sendall(header + payload)
+            
+            # Wait for ACK. Since server.py sends ACK *after* execution completes,
+            # this correctly ties up the thread until the Pi is ready for a new array!
+            _ = sock.recv(1024)
+            
+            sock.close()
+        except Exception:
+            pass # Ignore network errors silently to avoid console spam
+
+    net_thread = threading.Thread(target=worker, daemon=True)
+    net_thread.start()
 
 
 # --- CONFIGURABLE BASE SETTINGS ---
