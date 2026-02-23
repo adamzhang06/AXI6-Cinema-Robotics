@@ -1,6 +1,7 @@
 #
 .vscode/
 models/yolov8n_saved_model
+/legacy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
