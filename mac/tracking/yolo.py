@@ -17,48 +17,71 @@ udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 WIDTH, HEIGHT = 1920, 1080
 BASE_DZ_SLIDE = 60
 BASE_DZ_PAN = 150
-BASE_DZ_TILT = 40
+BASE_DZ_TILT = 40 # Tighter deadzone since faces are smaller targets
 
 # The dynamic deadzone factor (0.5 = shrinks to 50% of its size when recentering)
 RECENTER_RATIO = 0.5
 
-SMOOTHING_FACTOR = 0.25 
+SMOOTHING_FACTOR = 0.25
 MAX_TRACK_DIST = 250 
-GLOBAL_SPEED_SCALE = 1.0
+GLOBAL_SPEED_SCALE = 0.1
 
 # --- 1. SHARED SYSTEM STATE ---
 system_state = {
     "running": True,
     "slide": {"speed": 0, "dir": 0, "locked": True,  "recentering": False},
-    "pan":   {"speed": 0, "dir": 0, "locked": False, "recentering": False},
+    "pan":   {"speed": 0, "dir": 0, "locked": True,  "recentering": False},
     "tilt":  {"speed": 0, "dir": 0, "locked": True,  "recentering": False}
 }
 
-# --- 2. VISION THREAD (YOLOv8) ---
-latest_boxes = []
-frame_for_yolo = None
+# --- 2. VISION THREADS (YOLOv8 Dual Models) ---
+latest_body_boxes = []
+latest_face_boxes = []
+frame_for_body = None
+frame_for_face = None
 
-def vision_worker():
-    global latest_boxes, frame_for_yolo
-    print("[VISION] Loading YOLO Model...")
-    
+def body_vision_worker():
+    global latest_body_boxes, frame_for_body
+    print("[VISION] Loading Body YOLO Model...")
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(script_dir, '..', 'models', 'yolov8n_float16.tflite')
-    
-    model = YOLO(model_path) 
-    print("[VISION] Model Loaded. Thread Active.")
+    model_path = os.path.join(script_dir, '.', 'models', 'yolov8n_float16.tflite')
+    body_model = YOLO(model_path) 
+    print("[VISION] Body Model Loaded. Thread Active.")
     
     while system_state["running"]:
-        if frame_for_yolo is not None:
-            results = model.predict(frame_for_yolo, classes=[0], verbose=False)
+        if frame_for_body is not None:
+            # Predict 'person' class only (0)
+            results = body_model.predict(frame_for_body, classes=[0], verbose=False)
             if len(results) > 0:
-                latest_boxes = results[0].boxes.xyxy.cpu().numpy()
+                latest_body_boxes = results[0].boxes.xyxy.cpu().numpy()
             else:
-                latest_boxes = []
-            frame_for_yolo = None 
+                latest_body_boxes = []
+            frame_for_body = None 
         else:
             time.sleep(0.01)
-    print("[VISION] Thread Stopped.")
+    print("[VISION] Body Thread Stopped.")
+
+def face_vision_worker():
+    global latest_face_boxes, frame_for_face
+    print("[VISION] Loading Face YOLO Model...")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(script_dir, '.', 'models', 'face_yolov8n_float16.tflite')
+    face_model = YOLO(model_path) 
+    print("[VISION] Face Model Loaded. Thread Active.")
+    
+    while system_state["running"]:
+        if frame_for_face is not None:
+            # Face model usually has face mapped to class 0 (or is the only class)
+            results = face_model.predict(frame_for_face, verbose=False)
+            if len(results) > 0:
+                latest_face_boxes = results[0].boxes.xyxy.cpu().numpy()
+            else:
+                latest_face_boxes = []
+            frame_for_face = None 
+        else:
+            time.sleep(0.01)
+    print("[VISION] Face Thread Stopped.")
+
 
 # --- 3. PID & EMA CLASSES ---
 class StepperPID:
@@ -83,12 +106,19 @@ class StepperPID:
         self.prev_error = error
 
         raw_velocity = (self.kp * error) + (self.ki * self.integral) + (self.kd * derivative)
-        scaled_velocity = abs(raw_velocity) * GLOBAL_SPEED_SCALE
         
-        speed = min(int(scaled_velocity), self.max_speed)
+        # Non-linear curve: apply an exponent to make small errors move very slowly
+        # while keeping large errors fast.
+        sign = 1 if raw_velocity >= 0 else -1
+        # The 0.05 factor keeps the math manageable before exponentiating
+        curved_velocity = sign * (abs(raw_velocity * 0.05) ** 1.5)
+        
+        scaled_velocity = abs(curved_velocity) * GLOBAL_SPEED_SCALE
+        
+        speed = min(scaled_velocity, self.max_speed)
         direction = 10 if error > 0 else -10 
         
-        return speed, direction
+        return float(speed), int(direction)
         
     def reset(self):
         self.integral = 0
@@ -103,15 +133,19 @@ class EMASmoother:
         return self.value
 
 # --- 4. START BACKGROUND THREADS ---
-vision_thread = threading.Thread(target=vision_worker, daemon=True)
-vision_thread.start()
+body_thread = threading.Thread(target=body_vision_worker, daemon=True)
+face_thread = threading.Thread(target=face_vision_worker, daemon=True)
+body_thread.start()
+face_thread.start()
 
 # --- 5. SETUP UTILS & PID ---
-slide_pid = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000)
-pan_pid   = StepperPID(kp=1, ki=0.01, kd=3.5, max_speed=2000)
-tilt_pid  = StepperPID(kp=0.075, ki=0.01, kd=3.5, max_speed=2000)
+# max_speed here represents maximum steps per second (Hz). 800 Hz = 4 revs/sec at 200 steps/rev
+slide_pid = StepperPID(kp=0.5, ki=0.01, kd=3.5, max_speed=1200)
+pan_pid   = StepperPID(kp=1.75, ki=0.01, kd=0.001, max_speed=1200)
+tilt_pid  = StepperPID(kp=1.85, ki=0.01, kd=0.0008, max_speed=1200)
 
-smoothers = {k: EMASmoother(SMOOTHING_FACTOR) for k in ["left", "right", "top", "bottom"]}
+smoothers_body = {k: EMASmoother(SMOOTHING_FACTOR) for k in ["left", "right", "top", "bottom"]}
+smoothers_face = {k: EMASmoother(SMOOTHING_FACTOR) for k in ["left", "right", "top", "bottom"]}
 
 def draw_outlined_text(img, text, pos, font_scale, color, thickness):
     cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness + 3)
@@ -121,14 +155,16 @@ def draw_crosshair(img, cx, cy, color, size=8, thickness=1):
     cv2.line(img, (int(cx) - size, int(cy)), (int(cx) + size, int(cy)), color, thickness)
     cv2.line(img, (int(cx), int(cy) - size), (int(cx), int(cy) + size), color, thickness)
 
+def center_of_box(box):
+    return (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+
 # --- 6. MAIN VISION LOOP ---
-tracking_mode = "single"
 target_person_index = 0
 dz_scale = 1.0  
 STANDBY_COLOR = (255, 200, 50) 
 RECENTER_COLOR = (0, 0, 255) # Red for active snapping
+FACE_COLOR = (200, 50, 255)
 
-expected_num_people = 0
 is_frozen = False
 freeze_start_time = 0
 flicker_grace_sec = 0.5 
@@ -152,8 +188,10 @@ while cap.isOpened() and system_state["running"]:
     frame = cv2.flip(frame, 1)
     current_time = time.time()
 
-    if frame_for_yolo is None:
-        frame_for_yolo = frame.copy()
+    if frame_for_body is None:
+        frame_for_body = frame.copy()
+    if frame_for_face is None:
+        frame_for_face = frame.copy()
 
     frame_h, frame_w, _ = frame.shape
     frame_center_x, frame_center_y = int(frame_w / 2), int(frame_h / 2)
@@ -165,56 +203,71 @@ while cap.isOpened() and system_state["running"]:
     
     system_engaged = not all(system_state[a]["locked"] for a in ["slide", "pan", "tilt"])
 
-    current_boxes = list(latest_boxes)
-    current_num_people = len(current_boxes)
+    current_body_boxes = list(latest_body_boxes)
+    current_face_boxes = list(latest_face_boxes)
+    current_num_people = len(current_body_boxes)
     
     if current_num_people > 0:
-        current_boxes.sort(key=lambda b: b[0])
+        current_body_boxes.sort(key=lambda b: b[0])
         target_person_index = target_person_index % current_num_people
 
-    target_found_this_frame = False
-    best_box = None
+    target_body_found = False
+    best_body_box = None
+    best_face_box = None
 
     # --- TRACKING LOGIC ---
-    if tracking_mode == "single" and current_num_people > 0:
+    if current_num_people > 0:
         if force_target_switch:
-            best_box = current_boxes[target_person_index]
-            last_target_cx = (best_box[0] + best_box[2]) / 2
-            last_target_cy = (best_box[1] + best_box[3]) / 2
+            best_body_box = current_body_boxes[target_person_index]
+            last_target_cx, last_target_cy = center_of_box(best_body_box)
             force_target_switch = False
-            target_found_this_frame = True
+            target_body_found = True
         else:
             min_dist = float('inf')
-            for box in current_boxes:
-                cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+            for box in current_body_boxes:
+                cx, cy = center_of_box(box)
                 dist = math.hypot(cx - last_target_cx, cy - last_target_cy)
                 if dist < min_dist:
                     min_dist = dist
-                    best_box = box
+                    best_body_box = box
             
-            if best_box is not None and min_dist < MAX_TRACK_DIST:
-                target_found_this_frame = True
-                last_target_cx = (best_box[0] + best_box[2]) / 2
-                last_target_cy = (best_box[1] + best_box[3]) / 2
-                target_person_index = next(i for i, b in enumerate(current_boxes) if np.array_equal(b, best_box))
+            if best_body_box is not None and min_dist < MAX_TRACK_DIST:
+                target_body_found = True
+                last_target_cx, last_target_cy = center_of_box(best_body_box)
+                target_person_index = next(i for i, b in enumerate(current_body_boxes) if np.array_equal(b, best_body_box))
 
-    elif tracking_mode == "group":
-        if current_num_people >= expected_num_people and current_num_people > 0:
-            expected_num_people = current_num_people
-            target_found_this_frame = True
+    # If we found a body, find its corresponding face
+    if target_body_found:
+        body_x1, body_y1, body_x2, body_y2 = best_body_box[:4]
+        
+        # Find the face that is mostly inside the target body box
+        for f_box in current_face_boxes:
+            fx1, fy1, fx2, fy2 = f_box[:4]
+            fcx, fcy = center_of_box(f_box)
+            
+            # Simple check: is face center inside the upper half of the body box?
+            upper_body_y = body_y1 + ((body_y2 - body_y1) * 0.6)
+            if body_x1 <= fcx <= body_x2 and body_y1 <= fcy <= upper_body_y:
+                best_face_box = f_box
+                break
+
 
     # --- THE STATE MACHINE ---
-    if target_found_this_frame:
+    if target_body_found:
         is_frozen, target_lost = False, False
-        if tracking_mode == "single":
-            mode_text = f"Single Tracking (Person {target_person_index + 1}/{current_num_people})"
-            raw_left, raw_top, raw_right, raw_bottom = best_box[0], best_box[1], best_box[2], best_box[3]
-        elif tracking_mode == "group":
-            mode_text = f"Group Tracking ({current_num_people} people)"
-            raw_left = min(b[0] for b in current_boxes)
-            raw_right = max(b[2] for b in current_boxes)
-            raw_top = min(b[1] for b in current_boxes)
-            raw_bottom = max(b[3] for b in current_boxes)
+        mode_text = f"Composite Tracking (Person {target_person_index + 1}/{current_num_people})"
+        b_raw_left, b_raw_top, b_raw_right, b_raw_bottom = best_body_box[:4]
+        
+        if best_face_box is not None:
+            f_raw_left, f_raw_top, f_raw_right, f_raw_bottom = best_face_box[:4]
+        else:
+            # Fallback to approximating face if we lose the face model temporarily
+            approx_fw = (b_raw_right - b_raw_left) * 0.2
+            approx_cx = (b_raw_left + b_raw_right) / 2
+            f_raw_top = b_raw_top
+            f_raw_bottom = b_raw_top + approx_fw
+            f_raw_left = approx_cx - (approx_fw / 2)
+            f_raw_right = approx_cx + (approx_fw / 2)
     else:
         if not is_frozen and not target_lost:
             is_frozen, freeze_start_time = True, current_time
@@ -225,19 +278,24 @@ while cap.isOpened() and system_state["running"]:
                 mode_text = f"LOSS GRACE HOLD ({time_left:.1f}s)"
             else:
                 is_frozen = False
-                if tracking_mode == "single" or current_num_people == 0:
+                if current_num_people == 0:
                     target_lost = True
-                elif tracking_mode == "group":
-                    expected_num_people = current_num_people
-                    target_lost = False 
 
-    for box in current_boxes:
+    # Draw all bodies
+    for box in current_body_boxes:
         x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
-        raw_cx, raw_cy = (x1 + x2) / 2, (y1 + y2) / 2
-        is_target = target_found_this_frame and best_box is not None and np.array_equal(box, best_box)
+        cx, cy = center_of_box(box)
+        is_target = target_body_found and best_body_box is not None and np.array_equal(box, best_body_box)
         box_color = STANDBY_COLOR if is_target else (0, 0, 255)
         cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
-        draw_crosshair(frame, raw_cx, raw_cy, box_color, size=8, thickness=1)
+        draw_crosshair(frame, cx, cy, box_color, size=8, thickness=1)
+        
+    # Draw all faces
+    for box in current_face_boxes:
+        x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+        is_target_face = target_body_found and best_face_box is not None and np.array_equal(box, best_face_box)
+        box_color = FACE_COLOR if is_target_face else (100, 100, 100)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
 
     # Variables for UI drawing so they sync perfectly with the logic
     active_dz_s = base_dz_slide
@@ -256,63 +314,75 @@ while cap.isOpened() and system_state["running"]:
         mode_text = "TARGET LOST"
     else:
         if not is_frozen:
-            smoothers["left"].update(raw_left)
-            smoothers["right"].update(raw_right)
-            smoothers["top"].update(raw_top)
-            smoothers["bottom"].update(raw_bottom)
+            smoothers_body["left"].update(b_raw_left)
+            smoothers_body["right"].update(b_raw_right)
+            smoothers_body["top"].update(b_raw_top)
+            smoothers_body["bottom"].update(b_raw_bottom)
+            
+            smoothers_face["left"].update(f_raw_left)
+            smoothers_face["right"].update(f_raw_right)
+            smoothers_face["top"].update(f_raw_top)
+            smoothers_face["bottom"].update(f_raw_bottom)
 
-        s_left, s_right = smoothers["left"].value, smoothers["right"].value
-        s_top, s_bottom = smoothers["top"].value, smoothers["bottom"].value
-        target_cx, target_cy = (s_left + s_right) / 2, (s_top + s_bottom) / 2
-        offset_x, offset_y = target_cx - frame_center_x, target_cy - frame_center_y
+        # Slide & Pan track BODY
+        b_s_left, b_s_right = smoothers_body["left"].value, smoothers_body["right"].value
+        b_s_top, b_s_bottom = smoothers_body["top"].value, smoothers_body["bottom"].value
+        body_cx, body_cy = (b_s_left + b_s_right) / 2, (b_s_top + b_s_bottom) / 2
+        body_offset_x = body_cx - frame_center_x
         
-        # --- SLIDE (X-Axis) ---
+        # Tilt tracks FACE
+        f_s_left, f_s_right = smoothers_face["left"].value, smoothers_face["right"].value
+        f_s_top, f_s_bottom = smoothers_face["top"].value, smoothers_face["bottom"].value
+        face_cx, face_cy = (f_s_left + f_s_right) / 2, (f_s_top + f_s_bottom) / 2
+        face_offset_y = face_cy - frame_center_y
+        
+        # --- SLIDE (X-Axis, Body) ---
         if not system_state["slide"]["locked"]:
-            if not system_state["slide"]["recentering"] and abs(offset_x) > base_dz_slide:
+            if not system_state["slide"]["recentering"] and abs(body_offset_x) > base_dz_slide:
                 system_state["slide"]["recentering"] = True
             
             active_dz_s = int(base_dz_slide * RECENTER_RATIO) if system_state["slide"]["recentering"] else base_dz_slide
             
-            if system_state["slide"]["recentering"] and abs(offset_x) <= active_dz_s:
+            if system_state["slide"]["recentering"] and abs(body_offset_x) <= active_dz_s:
                 system_state["slide"]["recentering"] = False
                 active_dz_s = base_dz_slide
 
-            if abs(offset_x) > active_dz_s:
-                system_state["slide"]["speed"], system_state["slide"]["dir"] = slide_pid.compute(offset_x)
+            if abs(body_offset_x) > active_dz_s:
+                system_state["slide"]["speed"], system_state["slide"]["dir"] = slide_pid.compute(body_offset_x)
             else: 
                 system_state["slide"]["speed"], system_state["slide"]["dir"] = 0, 0
                 slide_pid.reset()
 
-        # --- PAN (X-Axis) ---
+        # --- PAN (X-Axis, Body) ---
         if not system_state["pan"]["locked"]:
-            if not system_state["pan"]["recentering"] and abs(offset_x) > base_dz_pan:
+            if not system_state["pan"]["recentering"] and abs(body_offset_x) > base_dz_pan:
                 system_state["pan"]["recentering"] = True
             
             active_dz_p = int(base_dz_pan * RECENTER_RATIO) if system_state["pan"]["recentering"] else base_dz_pan
             
-            if system_state["pan"]["recentering"] and abs(offset_x) <= active_dz_p:
+            if system_state["pan"]["recentering"] and abs(body_offset_x) <= active_dz_p:
                 system_state["pan"]["recentering"] = False
                 active_dz_p = base_dz_pan
 
-            if abs(offset_x) > active_dz_p:
-                system_state["pan"]["speed"], system_state["pan"]["dir"] = pan_pid.compute(offset_x)
+            if abs(body_offset_x) > active_dz_p:
+                system_state["pan"]["speed"], system_state["pan"]["dir"] = pan_pid.compute(body_offset_x)
             else: 
                 system_state["pan"]["speed"], system_state["pan"]["dir"] = 0, 0
                 pan_pid.reset()
 
-        # --- TILT (Y-Axis) ---
+        # --- TILT (Y-Axis, Face) ---
         if not system_state["tilt"]["locked"]:
-            if not system_state["tilt"]["recentering"] and abs(offset_y) > base_dz_tilt:
+            if not system_state["tilt"]["recentering"] and abs(face_offset_y) > base_dz_tilt:
                 system_state["tilt"]["recentering"] = True
             
             active_dz_t = int(base_dz_tilt * RECENTER_RATIO) if system_state["tilt"]["recentering"] else base_dz_tilt
             
-            if system_state["tilt"]["recentering"] and abs(offset_y) <= active_dz_t:
+            if system_state["tilt"]["recentering"] and abs(face_offset_y) <= active_dz_t:
                 system_state["tilt"]["recentering"] = False
                 active_dz_t = base_dz_tilt
 
-            if abs(offset_y) > active_dz_t:
-                system_state["tilt"]["speed"], system_state["tilt"]["dir"] = tilt_pid.compute(offset_y)
+            if abs(face_offset_y) > active_dz_t:
+                system_state["tilt"]["speed"], system_state["tilt"]["dir"] = tilt_pid.compute(face_offset_y)
             else: 
                 system_state["tilt"]["speed"], system_state["tilt"]["dir"] = 0, 0
                 tilt_pid.reset()
@@ -320,18 +390,19 @@ while cap.isOpened() and system_state["running"]:
         actively_sending_input = any(not system_state[a]["locked"] and system_state[a]["speed"] > 0 for a in ["slide", "pan", "tilt"])
         target_color = (0, 255, 0) if actively_sending_input else STANDBY_COLOR
 
-        if tracking_mode == "single":
-            cv2.rectangle(frame, (int(s_left), int(s_top)), (int(s_right), int(s_bottom)), target_color, 2)
-            draw_crosshair(frame, target_cx, target_cy, target_color, size=8, thickness=2)
-        elif tracking_mode == "group":
-            cv2.circle(frame, (int(target_cx), int(target_cy)), 25, target_color, 3)
-            cv2.circle(frame, (int(target_cx), int(target_cy)), 4, target_color, -1)
+        # Draw Smoothed Target Boxes
+        cv2.rectangle(frame, (int(b_s_left), int(b_s_top)), (int(b_s_right), int(b_s_bottom)), target_color, 2)
+        cv2.rectangle(frame, (int(f_s_left), int(f_s_top)), (int(f_s_right), int(f_s_bottom)), FACE_COLOR, 2)
+        draw_crosshair(frame, body_cx, body_cy, target_color, size=8, thickness=2)
+        draw_crosshair(frame, face_cx, face_cy, FACE_COLOR, size=8, thickness=2)
 
     # --- TRANSMIT DATA TO PI ---
+    # Swap pan and tilt at the network level: X-axis movement (pan) on camera 
+    # translates to differential tilt, and Y-axis translates to differential pan.
     payload = json.dumps({
         "slide": {"speed": system_state["slide"]["speed"], "dir": system_state["slide"]["dir"]},
-        "pan":   {"speed": system_state["pan"]["speed"],   "dir": system_state["pan"]["dir"]},
-        "tilt":  {"speed": system_state["tilt"]["speed"],  "dir": system_state["tilt"]["dir"]}
+        "pan":   {"speed": system_state["tilt"]["speed"],  "dir": system_state["tilt"]["dir"]},
+        "tilt":  {"speed": system_state["pan"]["speed"],   "dir": system_state["pan"]["dir"]}
     })
     udp_sock.sendto(payload.encode('utf-8'), (PI_IP, PI_PORT))
 
@@ -351,7 +422,7 @@ while cap.isOpened() and system_state["running"]:
         if xr < frame_w + 50: cv2.putText(frame, "PAN DZ", (xr + 5, yt - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, c_pan, 1)
 
     if not system_state["tilt"]["locked"]:
-        c_tilt = RECENTER_COLOR if system_state["tilt"]["recentering"] else STANDBY_COLOR
+        c_tilt = RECENTER_COLOR if system_state["tilt"]["recentering"] else FACE_COLOR
         yt, yb = int(frame_center_y - active_dz_t), int(frame_center_y + active_dz_t)
         xl, xr = frame_center_x - 150, frame_center_x + 150
         cv2.line(frame, (xl, yt), (xr, yt), c_tilt, 2)
@@ -386,13 +457,10 @@ while cap.isOpened() and system_state["running"]:
     elif key == ord(' '): system_state["slide"]["locked"] = system_state["pan"]["locked"] = system_state["tilt"]["locked"] = True
         
     elif key == ord('1'): 
-        tracking_mode, target_person_index = "single", target_person_index - 1
         force_target_switch, target_lost = True, False
     elif key == ord('2'): 
-        tracking_mode, target_person_index = "single", target_person_index + 1
+        target_person_index = target_person_index + 1
         force_target_switch, target_lost = True, False
-    elif key == ord('3'): 
-        tracking_mode, expected_num_people, target_lost = "group", 0, False
     
     elif key == ord('i'): dz_scale = max(1.0, dz_scale - 0.5) 
     elif key == ord('o'): dz_scale = min(8.0, dz_scale + 0.5) 
@@ -405,5 +473,6 @@ udp_sock.sendto(stop_payload.encode('utf-8'), (PI_IP, PI_PORT))
 
 cap.release()
 cv2.destroyAllWindows()
-vision_thread.join()
+body_thread.join()
+face_thread.join()
 print("System Successfully Offline.")
