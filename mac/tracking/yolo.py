@@ -5,13 +5,35 @@ import threading
 import math
 import socket
 import json
+import struct
 import numpy as np
 from ultralytics import YOLO
 
+
 # --- NETWORK SETUP ---
 PI_IP = "100.69.176.89"  
-PI_PORT = 5005
-udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+PI_PORT = 5010 # Changed to TCP port
+
+def send_trajectory_to_pi(trajectory_dict):
+    """Connects to the Pi and sends the trajectory dict as length-prefixed JSON."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1.0) # Short timeout for real-time tracking
+        
+        # Disable Nagle's algorithm for fast real-time transmission
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        
+        sock.connect((PI_IP, PI_PORT))
+        
+        payload = json.dumps(trajectory_dict).encode('utf-8')
+        header = struct.pack('>I', len(payload))
+        sock.sendall(header + payload)
+        
+        # We don't wait for ACK in real-time tracking to avoid blocking frame processing
+        sock.close()
+    except Exception as e:
+        pass # Ignore dropped frames in tracking
+
 
 # --- CONFIGURABLE BASE SETTINGS ---
 WIDTH, HEIGHT = 1920, 1080
@@ -396,15 +418,37 @@ while cap.isOpened() and system_state["running"]:
         draw_crosshair(frame, body_cx, body_cy, target_color, size=8, thickness=2)
         draw_crosshair(frame, face_cx, face_cy, FACE_COLOR, size=8, thickness=2)
 
+
     # --- TRANSMIT DATA TO PI ---
-    # Swap pan and tilt at the network level: X-axis movement (pan) on camera 
-    # translates to differential tilt, and Y-axis translates to differential pan.
-    payload = json.dumps({
-        "slide": {"speed": system_state["slide"]["speed"], "dir": system_state["slide"]["dir"]},
-        "pan":   {"speed": system_state["tilt"]["speed"],  "dir": system_state["tilt"]["dir"]},
-        "tilt":  {"speed": system_state["pan"]["speed"],   "dir": system_state["pan"]["dir"]}
-    })
-    udp_sock.sendto(payload.encode('utf-8'), (PI_IP, PI_PORT))
+    # Convert speeds to purely relative changes (dp) over a fixed dt interval (e.g., 0.1s frame assuming 10hz update rate)
+    dt = 0.1 
+    
+    # We swap pan/tilt at network level like before
+    # old: "pan":   {"speed": system_state["tilt"]["speed"],  "dir": system_state["tilt"]["dir"]}
+    # Hz = speed * sign(dir)
+    # dp = Hz * dt
+    
+    def get_dp(axis_name):
+        speed = system_state[axis_name]["speed"]
+        direction = system_state[axis_name]["dir"]
+        hz = speed if direction > 0 else -speed if direction < 0 else 0
+        return hz * dt
+        
+    s_dp = get_dp("slide") # Slide ignored for now on Pi side, but sent anyway
+    p_dp = get_dp("tilt")  # Camera Tilt = Mount Pan
+    t_dp = get_dp("pan")   # Camera Pan = Mount Tilt
+
+    # The PI expects [[time, position], ...]
+    # For real-time, we just send a single segment [dt, dp]
+    payload_dict = {
+        "pan": [[dt, p_dp]],
+        "tilt": [[dt, t_dp]]
+    }
+    
+    # Only transmit if actively engaged (save TCP overhead when locked)
+    if actively_sending_input:
+        send_trajectory_to_pi(payload_dict)
+
 
     # --- DRAW ACTIVE DYNAMIC DEADZONE BOUNDARIES ---
     if not system_state["slide"]["locked"]:
@@ -467,9 +511,11 @@ while cap.isOpened() and system_state["running"]:
     elif key == ord('['): flicker_grace_sec = max(0.0, flicker_grace_sec - 0.1) 
     elif key == ord(']'): flicker_grace_sec = min(5.0, flicker_grace_sec + 0.1) 
 
+
 # Safe Shutdown
-stop_payload = json.dumps({"slide": {"speed":0,"dir":0}, "pan": {"speed":0,"dir":0}, "tilt": {"speed":0,"dir":0}})
-udp_sock.sendto(stop_payload.encode('utf-8'), (PI_IP, PI_PORT))
+stop_payload = {"pan": [[0.1, 0]], "tilt": [[0.1, 0]]}
+send_trajectory_to_pi(stop_payload)
+
 
 cap.release()
 cv2.destroyAllWindows()

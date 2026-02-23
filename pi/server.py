@@ -26,7 +26,6 @@ from core.motion.spline import SplineInterpolator
 HOST = "0.0.0.0"
 TCP_PORT = 5010
 BEACON_PORT = 5011
-UDP_TRACKING_PORT = 5005
 
 running = True
 
@@ -59,44 +58,8 @@ def beacon_broadcaster():
         time.sleep(2)
 
 
-# ─ UDP Tracking Listener ──────────────────────────────────────────────────────
-def tracking_listener():
-    """Listens for continuous velocity commands from Mac tracking script."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((HOST, UDP_TRACKING_PORT))
-    sock.settimeout(1.0)
-    print(f"[TRACKING] Listening for live velocity on UDP port {UDP_TRACKING_PORT}...")
-
-    while running:
-        try:
-            data, addr = sock.recvfrom(1024)
-            payload = json.loads(data.decode('utf-8'))
-            
-            # Format from Mac yolo script:
-            # {"pan": {"speed": X, "dir": Y}, "tilt": {"speed": X, "dir": Y}}
-            
-            pan_speed = payload.get("pan", {}).get("speed", 0)
-            pan_dir = payload.get("pan", {}).get("dir", 0)
-            tilt_speed = payload.get("tilt", {}).get("speed", 0)
-            tilt_dir = payload.get("tilt", {}).get("dir", 0)
-            
-            # Convert direction dict into signed frequency (hz/steps per second)
-            # Assuming direction is >0 for forward, <0 for backward (dir is currently -10 or 10 in mac yolo.py)
-            pan_hz = pan_speed if pan_dir > 0 else -pan_speed if pan_dir < 0 else 0
-            tilt_hz = tilt_speed if tilt_dir > 0 else -tilt_speed if tilt_dir < 0 else 0
-            
-            # Set the velocity on the drive
-            drive.set_velocity(pan_hz, tilt_hz)
-            
-        except socket.timeout:
-            continue
-        except json.JSONDecodeError:
-            pass
-        except Exception as e:
-            print(f"[TRACKING-ERR] {e}")
-
-
 # ─ TCP Server Setup ───────────────────────────────────────────────────────────
+
 def receive_trajectory(conn):
     """Reads a length-prefixed JSON trajectory from a TCP connection."""
     # Read 4-byte big-endian length header
@@ -108,8 +71,7 @@ def receive_trajectory(conn):
         length_bytes += chunk
 
     payload_length = struct.unpack('>I', length_bytes)[0]
-    print(f"[NET] Expecting {payload_length} bytes of trajectory data...")
-
+    
     # Read the full JSON payload
     payload = b''
     while len(payload) < payload_length:
@@ -119,7 +81,18 @@ def receive_trajectory(conn):
         payload += chunk
 
     data = json.loads(payload.decode('utf-8'))
-    return data["pan"], data["tilt"]
+    
+    pan_spline = data["pan"]
+    tilt_spline = data["tilt"]
+    
+    # If the payload is just a single point [dt, dp] from live tracking,
+    # prepend [0, 0] so generate_times can interpolate a valid segment.
+    if len(pan_spline) == 1:
+        pan_spline.insert(0, [0.0, 0.0])
+    if len(tilt_spline) == 1:
+        tilt_spline.insert(0, [0.0, 0.0])
+        
+    return pan_spline, tilt_spline
 
 
 def generate_times(spline_data) -> tuple[bool, list[float]]:
@@ -212,12 +185,6 @@ def main():
     beacon_thread = threading.Thread(target=beacon_broadcaster, daemon=True)
     beacon_thread.start()
     
-    # Start tracking listener in background
-    tracking_thread = threading.Thread(target=tracking_listener, daemon=True)
-    tracking_thread.start()
-
-    # Start the continuous drive mode in background for tracking
-    drive.start_continuous()
 
     # Start TCP server
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -244,7 +211,6 @@ def main():
                 conn.close()
 
                 # Calculate times and block to execute via precision GPIO
-                # This automatically pauses continuous tracking, then resumes after!
                 execute_trajectory(pan_spline, tilt_spline)
                 print("[SERVER] Ready for next trajectory.")
 
