@@ -267,6 +267,7 @@
     <span class="tb-info" id="infoDisplay">0 pts</span>
     <div class="sep"></div>
     <button class="tb-btn send-btn" id="btnSend">▶ Send to Motor</button>
+    <button class="tb-btn" id="btnSave" style="margin-left:8px;">💾 Save JSON</button>
   </div>
 
   <!-- CANVAS -->
@@ -969,6 +970,49 @@
       //  BUTTONS
       // =================================================================
       $('btnPlay').addEventListener('click', togglePlay);
+
+
+      $('btnSave').addEventListener('click', async () => {
+        const sorted = sortedPoints();
+        if (sorted.length < 2) {
+          showToast("Need at least 2 points", true);
+          return;
+        }
+
+        const pr = params();
+        const pts = [];
+        for (let t = 0; t <= pr.totalTime + 0.0001; t += pr.dt) {
+          const fracX = Math.min(1, t / pr.totalTime);
+          const fracY = evalSpline(sorted, fracX);
+          const real = frac2real(fracX, fracY);
+          pts.push([t, real.angle]);
+        }
+        
+        // Since test_spline_editor is single curve, we just mirror to both pan and tilt
+        // so the backend can process it into a differential drive payload
+        const trajectory = { pan: pts, tilt: pts };
+        
+        $('btnSave').disabled = true;
+        $('btnSave').textContent = "Saving...";
+        
+        try {
+          const res = await fetch('/save_json', {
+            method: 'POST',
+            body: JSON.stringify(trajectory)
+          });
+          const data = await res.json();
+          if (data.status === 'ok') {
+            showToast(`Saved to ${data.filename}`);
+          } else {
+            showToast("Error: " + data.message, true);
+          }
+        } catch(e) {
+          showToast("Network error", true);
+        }
+        
+        $('btnSave').disabled = false;
+        $('btnSave').textContent = "💾 Save JSON";
+      });
 
       $('btnSend').addEventListener('click', async () => {
         const trajectory = generateTrajectory();

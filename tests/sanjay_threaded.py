@@ -7,8 +7,8 @@ relying on the tmc_driver library's built-in loops.
 """
 
 import time
-import math
 import threading
+import json
 import RPi.GPIO as GPIO
 
 
@@ -17,64 +17,30 @@ print("SCRIPT START")
 print("---")
 
 # -----------------------------------------------------------------------
-# 1. Math Function: Exact Step Times (from sanjay.py)
-# -----------------------------------------------------------------------
-def calculate_step_times(total_steps, total_time, phases=3.0):
-    if total_steps == 0:
-        return []
 
-    t_a = total_time / phases
-    t_c = total_time - t_a
-    
-    v_max = total_steps / (total_time - t_a)
-    a = v_max / t_a
-    
-    P_a = 0.5 * a * (t_a**2)
-    P_c = P_a + v_max * (t_c - t_a)
-    
-    step_times = []
-    for p in range(1, int(total_steps) + 1):
-        if p <= P_a:
-            t = math.sqrt((2 * p) / a)
-        elif p <= P_c:
-            t = t_a + ((p - P_a) / v_max)
-        else:
-            dp = p - P_c
-            discriminant = max(0.0, (v_max**2) - (2 * a * dp))
-            t_prime = (v_max - math.sqrt(discriminant)) / a
-            t = t_c + t_prime
-            
-        step_times.append(t)
+# -----------------------------------------------------------------------
+# 1. Load Trajectory JSON
+# -----------------------------------------------------------------------
+# A test file we assume exists for playback testing. 
+# It should contain a dictionary: {"a_fwd": True, "a_times": [...], "b_fwd": True, "b_times": [...]}
+filename = input("Enter path to JSON trajectory (e.g., test.json): ")
+try:
+    with open(filename, 'r') as f:
+        data = json.load(f)
         
-    return step_times
+    a_direction_forward = data["a_fwd"]
+    a_step_times = data["a_times"]
+    
+    b_direction_forward = data["b_fwd"]
+    b_step_times = data["b_times"]
+    
+    print(f"Loaded Motor A: {len(a_step_times)} steps | Motor B: {len(b_step_times)} steps.")
+except Exception as e:
+    print(f"Failed to load JSON: {e}")
+    sys.exit(1)
 
 # -----------------------------------------------------------------------
-# 2. Get User Input & Differential Math
-# -----------------------------------------------------------------------
-pan_angle = float(input("Enter Pan angle in degrees (e.g., 360): "))
-tilt_angle = float(input("Enter Tilt angle in degrees (e.g., 0): "))
-target_time = float(input("Enter total move time in seconds (e.g., 5.0): "))
-
-# Differential Math
-# Motor A = Tilt + Pan
-# Motor B = Tilt - Pan
-motor_a_angle = tilt_angle + pan_angle
-motor_b_angle = tilt_angle - pan_angle
-
-steps_per_rev = 400
-a_steps_float = abs((motor_a_angle / 360.0) * steps_per_rev)
-b_steps_float = abs((motor_b_angle / 360.0) * steps_per_rev)
-
-a_direction_forward = (motor_a_angle >= 0)
-b_direction_forward = (motor_b_angle >= 0)
-
-a_step_times = calculate_step_times(a_steps_float, target_time, phases=3.0)
-b_step_times = calculate_step_times(b_steps_float, target_time, phases=3.0)
-
-print(f"\nCalculated Motor A: {len(a_step_times)} steps | Motor B: {len(b_step_times)} steps.")
-
-# -----------------------------------------------------------------------
-# 3. Setup GPIO for Direct High-Speed Control
+# 2. Setup GPIO for Direct High-Speed Control
 # -----------------------------------------------------------------------
 PAN_STEP = 16
 PAN_DIR = 20
@@ -92,15 +58,11 @@ GPIO.setup([PAN_STEP, PAN_DIR, PAN_EN, TILT_STEP, TILT_DIR, TILT_EN], GPIO.OUT)
 GPIO.output(PAN_EN, GPIO.LOW)
 GPIO.output(TILT_EN, GPIO.LOW)
 
-# Set directions physically
-# Note: In our pi/server.py architecture, Motor B is inverted
-GPIO.output(PAN_DIR, GPIO.HIGH if a_direction_forward else GPIO.LOW)
-GPIO.output(TILT_DIR, GPIO.LOW if b_direction_forward else GPIO.HIGH) # Inverted
-
 # -----------------------------------------------------------------------
-# 5. Thread Execution Engine
+# 3. Thread Execution Engine
 # -----------------------------------------------------------------------
 def motor_pulse_loop(step_pin, times_array, start_time_real):
+
     """The exact sanjay.py logic running inside a dedicated thread"""
     for target_t in times_array:
         # Busy-wait loop for microsecond precision against the global clock

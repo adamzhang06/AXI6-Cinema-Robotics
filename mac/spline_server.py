@@ -173,6 +173,54 @@ class SplineHTTPHandler(SimpleHTTPRequestHandler):
                     "status": "error",
                     "message": str(e)
                 }).encode())
+
+        elif self.path == '/save_json':
+            content_length = int(self.headers['Content-Length'])
+            body = self.rfile.read(content_length)
+            trajectory_dict = json.loads(body.decode('utf-8'))
+            
+            pan_spline = trajectory_dict.get('pan', [])
+            tilt_spline = trajectory_dict.get('tilt', [])
+
+            # Differential Math on the Mac -> Motor A and B Arrays
+            a_spline = []
+            b_spline = []
+            for i in range(len(pan_spline)):
+                t = pan_spline[i][0]
+                pan_p = pan_spline[i][1]
+                tilt_p = tilt_spline[i][1]
+                a_spline.append((t, pan_p + tilt_p))
+                b_spline.append((t, pan_p - tilt_p))
+                
+            a_fwd, a_times = generate_step_times(a_spline)
+            b_fwd, b_times = generate_step_times(b_spline)
+
+            payload_dict = {
+                "a_fwd": a_fwd,
+                "a_times": a_times,
+                "b_fwd": b_fwd,
+                "b_times": b_times
+            }
+            
+            import datetime
+            stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"trajectory_{stamp}.json"
+            save_path = os.path.join("tests", "trajectories", filename)
+            abs_save_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), save_path)
+            
+            os.makedirs(os.path.dirname(abs_save_path), exist_ok=True)
+            with open(abs_save_path, 'w') as f:
+                json.dump(payload_dict, f, indent=2)
+                
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "ok",
+                "filename": filename
+            }).encode())
+
         else:
             self.send_response(404)
             self.end_headers()
@@ -198,7 +246,7 @@ def main():
 
     # Start HTTP server
     server = HTTPServer(('0.0.0.0', HTTP_PORT), SplineHTTPHandler)
-    editor_url = f"http://127.0.0.1:{HTTP_PORT}/spline_editor.html"
+    editor_url = f"http://127.0.0.1:{HTTP_PORT}/test_spline_editor.html"
 
     print(f"[HTTP] Serving spline editor at {editor_url}")
     print("[HTTP] Design your trajectory, then click 'Send to Motor'.")
