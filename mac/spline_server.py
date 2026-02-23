@@ -81,11 +81,9 @@ def send_trajectory_to_pi(trajectory_dict):
     """Connects to the Pi and sends the trajectory dict as length-prefixed JSON."""
     global pi_ip, pi_port
 
-    # Try discovery if we haven't found the Pi yet
-    if pi_ip is None:
-        print("[NET] Pi not discovered yet, attempting discovery...")
-        if not discover_pi(timeout=5):
-            raise ConnectionError("Could not find Pi on the network. Is pi/server.py running?")
+    # Hardcoded IP for testing with sanjay_threaded.py which lacks the discovery beacon
+    pi_ip = "100.69.176.89"
+    pi_port = 5010
 
     print(f"[NET] Connecting to Pi at {pi_ip}:{pi_port}...")
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -126,6 +124,12 @@ class SplineHTTPHandler(SimpleHTTPRequestHandler):
             body = self.rfile.read(content_length)
             trajectory_dict = json.loads(body.decode('utf-8'))
             
+            if not isinstance(trajectory_dict, dict):
+                print(f"[HTTP] Received legacy point array payload. Ignoring.")
+                self.send_response(400)
+                self.end_headers()
+                return
+                
             pan_spline = trajectory_dict.get('pan', [])
             tilt_spline = trajectory_dict.get('tilt', [])
             print(f"[HTTP] Received {len(pan_spline)} pan / {len(tilt_spline)} tilt pts from browser.")
