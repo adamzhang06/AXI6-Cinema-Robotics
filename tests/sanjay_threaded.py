@@ -9,6 +9,9 @@ relying on the tmc_driver library's built-in loops.
 import time
 import threading
 import json
+import sys
+import socket
+import struct
 import RPi.GPIO as GPIO
 
 
@@ -19,15 +22,42 @@ print("---")
 # -----------------------------------------------------------------------
 
 # -----------------------------------------------------------------------
-# 1. Load Trajectory JSON
+
 # -----------------------------------------------------------------------
-# A test file we assume exists for playback testing. 
-# It should contain a dictionary: {"a_fwd": True, "a_times": [...], "b_fwd": True, "b_times": [...]}
-filename = input("Enter path to JSON trajectory (e.g., test.json): ")
+# 1. Listen for Trajectory JSON over TCP
+# -----------------------------------------------------------------------
+TCP_PORT = 5010
+
+print(f"Waiting for Mac to send a trajectory on TCP port {TCP_PORT}...")
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server.bind(('0.0.0.0', TCP_PORT))
+server.listen(1)
+
+conn, addr = server.accept()
+print(f"Connected from {addr[0]}:{addr[1]}")
+
 try:
-    with open(filename, 'r') as f:
-        data = json.load(f)
-        
+    # Read 4-byte big-endian length header
+    length_bytes = b''
+    while len(length_bytes) < 4:
+        chunk = conn.recv(4 - len(length_bytes))
+        if not chunk:
+            raise ConnectionError("Connection closed while reading length header")
+        length_bytes += chunk
+
+    payload_length = struct.unpack('>I', length_bytes)[0]
+    
+    # Read full JSON payload
+    payload = b''
+    while len(payload) < payload_length:
+        chunk = conn.recv(min(4096, payload_length - len(payload)))
+        if not chunk:
+            raise ConnectionError("Connection closed while reading payload")
+        payload += chunk
+
+    data = json.loads(payload.decode('utf-8'))
+    
     a_direction_forward = data["a_fwd"]
     a_step_times = data["a_times"]
     
@@ -35,12 +65,23 @@ try:
     b_step_times = data["b_times"]
     
     print(f"Loaded Motor A: {len(a_step_times)} steps | Motor B: {len(b_step_times)} steps.")
+    
+    # Send ACK back to Mac
+    ack = json.dumps({"status": "ok"}).encode('utf-8')
+    conn.sendall(ack)
+    
 except Exception as e:
-    print(f"Failed to load JSON: {e}")
+    print(f"Failed to receive JSON: {e}")
+    conn.close()
+    server.close()
     sys.exit(1)
+    
+conn.close()
+server.close()
 
 # -----------------------------------------------------------------------
 # 2. Setup GPIO for Direct High-Speed Control
+
 # -----------------------------------------------------------------------
 PAN_STEP = 16
 PAN_DIR = 20
