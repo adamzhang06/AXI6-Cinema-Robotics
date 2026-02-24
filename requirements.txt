@@ -1,0 +1,6 @@
+# Python version 3.11.14
+
+mediapipe
+opencv-python
+ultralytics
+tensorflow
