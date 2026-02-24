@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>axi6_camera_system</name>
+  <version>0.0.1</version>
+  <description>ROS 2 package for AXI6 Cinema Robotics system</description>
+  <maintainer email="sanjaytamil19@gmail.com">Sanjay Tamilselvan</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+</package>
