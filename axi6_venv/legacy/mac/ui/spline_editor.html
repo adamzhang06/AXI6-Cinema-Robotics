@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AXI6 Curve Editor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #2a2a2a;
+      --bg-panel: #333333;
+      --bg-toolbar: #1a1a1a;
+      --bg-input: #2a2a2a;
+      --border: #555555;
+      --border-subtle: #444444;
+      --text: #eaeaea;
+      --text-dim: #999;
+      --text-muted: #666;
+
+      /* Brand Colors */
+      --brand-yellow: #FFD500;
+      --bg-canvas: #555555;
+
+      /* Pan vs Tilt */
+      --color-pan: var(--brand-yellow);
+      --color-tilt: #5b9bd5;
+
+      --handle-line: rgba(255, 255, 255, 0.4);
+      --playhead: #e05050;
+      --grid: rgba(255, 255, 255, 0.15);
+      --grid-major: rgba(255, 255, 255, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* ---- HEADER / BRAND ---- */
+    .header {
+      height: 48px;
+      background: #111;
+      border-bottom: 2px solid var(--brand-yellow);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+    }
+
+    .logo {
+      height: 28px;
+      width: auto;
+    }
+
+    .header-title {
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+
+    /* ---- TOOLBAR ---- */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 12px;
+      height: 44px;
+      background: var(--bg-toolbar);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .toolbar .sep {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
+      margin: 0 8px;
+    }
+
+    .toolbar label {
+      color: var(--text-dim);
+      font-size: 11px;
+      margin-right: 4px;
+    }
+
+    .toolbar input[type="number"] {
+      width: 60px;
+      padding: 4px 6px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      margin-right: 12px;
+    }
+
+    .toolbar input[type="number"]:focus {
+      outline: none;
+      border-color: var(--brand-yellow);
+    }
+
+    .tb-btn {
+      padding: 5px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .tb-btn:hover {
+      border-color: var(--text-dim);
+      background: #333;
+    }
+
+    .tb-btn.play-btn {
+      font-size: 14px;
+      padding: 4px 10px;
+    }
+
+    .tb-btn.play-btn.playing {
+      color: var(--playhead);
+      border-color: var(--playhead);
+    }
+
+    .tb-btn.send-btn {
+      background: var(--brand-yellow);
+      border-color: var(--brand-yellow);
+      color: #111;
+      font-weight: 700;
+    }
+
+    .tb-btn.send-btn:hover {
+      background: #ffe64d;
+      box-shadow: 0 0 12px rgba(255, 213, 0, 0.4);
+    }
+
+    .tb-btn.send-btn:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .tb-spacer {
+      flex: 1;
+    }
+
+    .tb-info {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: 'SF Mono', 'Menlo', monospace;
+      margin-right: 8px;
+    }
+
+    /* ---- EDITOR MODES ---- */
+    .axis-selector {
+      display: flex;
+      background: #000;
+      border-radius: 6px;
+      padding: 2px;
+    }
+
+    .axis-tab {
+      padding: 4px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-dim);
+      transition: all 0.2s;
+    }
+
+    .axis-tab[data-axis="pan"].active {
+      background: var(--color-pan);
+      color: #111;
+    }
+
+    .axis-tab[data-axis="tilt"].active {
+      background: var(--color-tilt);
+      color: #111;
+    }
+
+    /* ---- CANVAS ---- */
+    .canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-canvas);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ---- TOAST & TOOLTIPS (Same as before) ---- */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      padding: 8px 20px;
+      background: var(--bg-toolbar);
+      border: 1px solid var(--brand-yellow);
+      border-radius: 6px;
+      color: var(--brand-yellow);
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      transition: all 0.25s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .toast.error {
+      border-color: var(--playhead);
+      color: var(--playhead);
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .tooltip {
+      position: fixed;
+      padding: 4px 8px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 10px;
+      color: var(--text);
+      font-family: 'SF Mono', 'Menlo', monospace;
+      pointer-events: none;
+      z-index: 50;
+      display: none;
+      white-space: nowrap;
+    }
+
+    .ctx-menu {
+      position: fixed;
+      background: var(--bg-toolbar);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 0;
+      z-index: 200;
+      display: none;
+      min-width: 140px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+
+    .ctx-menu .ctx-item {
+      padding: 6px 14px;
+      font-size: 11px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .ctx-menu .ctx-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .ctx-menu .ctx-item .shortcut {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    .ctx-menu .ctx-sep {
+      height: 1px;
+      background: var(--border);
+      margin: 3px 0;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <img src="media/AXI6_logo.png" alt="AXI6" class="logo">
+    <div class="header-title">CINEMA ROBOTICS</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="axis-selector" id="axisTabs">
+      <div class="axis-tab active" data-axis="pan">PAN</div>
+      <div class="axis-tab" data-axis="tilt">TILT</div>
+    </div>
+
+    <div class="sep"></div>
+    <button class="tb-btn play-btn" id="btnPlay" title="Play/Stop preview (Space)">▶</button>
+    <div class="sep"></div>
+
+    <label>Time</label><input type="number" id="inTime" value="5.0" step="0.1" min="0.1">
+    <label>Pan °</label><input type="number" id="inAnglePan" value="180" step="1" title="Max Pan Angle">
+    <label>Tilt °</label><input type="number" id="inAngleTilt" value="60" step="1" title="Max Tilt Angle">
+
+    <div class="sep"></div>
+    <button class="tb-btn" id="btnPreset">S-Curve</button>
+    <button class="tb-btn" id="btnMatch">Copy Pan → Tilt</button>
+    <button class="tb-btn" id="btnClear" style="color:#e05050;">Clear</button>
+
+    <div class="tb-spacer"></div>
+    <span class="tb-info" id="infoDisplay">0 pts</span>
+    <div class="sep"></div>
+    <button class="tb-btn send-btn" id="btnReverse"
+      style="background: var(--bg-panel); color: var(--text); border-color: var(--border); display: none;">Reverse
+      Last</button>
+    <button class="tb-btn send-btn" id="btnSend">▶ SEND TO MOTOR</button>
+  </div>
+
+  <div class="canvas-wrap">
+    <canvas id="cv"></canvas>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="tooltip" id="tooltip"></div>
+  <div class="ctx-menu" id="ctxMenu">
+    <div class="ctx-item" data-action="smooth">Smooth <span class="shortcut">S</span></div>
+    <div class="ctx-item" data-action="corner">Corner <span class="shortcut">C</span></div>
+    <div class="ctx-item" data-action="auto">Auto Tangent <span class="shortcut">A</span></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-action="delete" style="color:#e05050;">Delete Point <span class="shortcut">⌫</span></div>
+  </div>
+
+  <script>
+    (() => {
+      const cv = document.getElementById('cv');
+      const ctx = cv.getContext('2d');
+      const tooltip = document.getElementById('tooltip');
+      const ctxMenu = document.getElementById('ctxMenu');
+      const toast = document.getElementById('toast');
+      const $ = id => document.getElementById(id);
+
+      const MARGIN = { top: 30, right: 30, bottom: 40, left: 60 };
+      const POINT_RADIUS = 5;
+      const HANDLE_RADIUS = 3.5;
+      const HIT_RADIUS = 10;
+
+      // State
+      let activeAxis = 'pan'; // 'pan' or 'tilt'
+      let splines = {
+        pan: [
+          { x: 0, y: 0, handleIn: null, handleOut: { x: 0.35, y: 0 }, mode: 'smooth' },
+          { x: 1, y: 1, handleIn: { x: 0.65, y: 1 }, handleOut: null, mode: 'smooth' }
+        ],
+        tilt: [
+          { x: 0, y: 0, handleIn: null, handleOut: { x: 0.35, y: 0 }, mode: 'smooth' },
+          { x: 1, y: 1, handleIn: { x: 0.65, y: 1 }, handleOut: null, mode: 'smooth' }
+        ]
+      };
+
+      let selected = -1;
+      let dragging = null;
+      let playheadFrac = 0;
+      let isPlaying = false;
+      let playStartTime = 0;
+      let playRAF = null;
+      let lastSentTrajectory = null; // Caches the last sent {pan: [], tilt: []} dictionary
+
+      // Axis Toggling
+      document.querySelectorAll('.axis-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+          document.querySelectorAll('.axis-tab').forEach(t => t.classList.remove('active'));
+          e.target.classList.add('active');
+          activeAxis = e.target.dataset.axis;
+          selected = -1;
+          dragging = null;
+          draw();
+        });
+      });
+
+      function getPoints() { return splines[activeAxis]; }
+      function getActiveColor() { return activeAxis === 'pan' ? '#FFD500' : '#5b9bd5'; }
+      function getInactiveColor() { return activeAxis === 'pan' ? '#5b9bd5' : '#FFD500'; }
+
+      function params() {
+        return {
+          totalTime: parseFloat($('inTime').value) || 5,
+          maxAnglePan: parseFloat($('inAnglePan').value) || 360,
+          maxAngleTilt: parseFloat($('inAngleTilt').value) || 90,
+          dt: 0.001,
+          stepsPerRev: 400
+        };
+      }
+
+      function getMaxAngle(axis) {
+        return axis === 'pan' ? params().maxAnglePan : params().maxAngleTilt;
+      }
+
+      function plotArea() {
+        const dpr = window.devicePixelRatio || 1;
+        return {
+          x: MARGIN.left, y: MARGIN.top,
+          w: cv.width / dpr - MARGIN.left - MARGIN.right,
+          h: cv.height / dpr - MARGIN.top - MARGIN.bottom,
+        };
+      }
+
+      function frac2canvas(fx, fy) {
+        const p = plotArea();
+        return [p.x + fx * p.w, p.y + (1 - fy) * p.h];
+      }
+
+      function canvas2frac(cx, cy) {
+        const p = plotArea();
+        return [(cx - p.x) / p.w, 1 - (cy - p.y) / p.h];
+      }
+
+      // Bezier Math
+      function cubicBezier(p0, p1, p2, p3, t) {
+        const mt = 1 - t;
+        return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
+      }
+
+      function cubicBezierDerivative(p0, p1, p2, p3, t) {
+        const mt = 1 - t;
+        return 3 * mt * mt * (p1 - p0) + 6 * mt * t * (p2 - p1) + 3 * t * t * (p3 - p2);
+      }
+
+      function autoTangent(pts, i) {
+        const prev = pts[Math.max(0, i - 1)], curr = pts[i], next = pts[Math.min(pts.length - 1, i + 1)];
+        const dx = (next.x - prev.x) * 0.25, dy = (next.y - prev.y) * 0.25;
+        curr.handleIn = { x: curr.x - dx, y: curr.y - dy };
+        curr.handleOut = { x: curr.x + dx, y: curr.y + dy };
+      }
+
+      function sortedPoints(axis) {
+        return [...splines[axis]].sort((a, b) => a.x - b.x);
+      }
+
+      function evalSpline(sorted, fx) {
+        if (sorted.length < 2) return sorted.length ? sorted[0].y : 0;
+        if (fx <= sorted[0].x) return sorted[0].y;
+        if (fx >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
+
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const a = sorted[i], b = sorted[i + 1];
+          if (fx >= a.x && fx <= b.x) {
+            const segFrac = (b.x - a.x) > 0 ? (fx - a.x) / (b.x - a.x) : 0;
+            const cp1x = a.handleOut ? a.handleOut.x : a.x + (b.x - a.x) / 3;
+            const cp2x = b.handleIn ? b.handleIn.x : b.x - (b.x - a.x) / 3;
+            const cp1y = a.handleOut ? a.handleOut.y : a.y + (b.y - a.y) / 3;
+            const cp2y = b.handleIn ? b.handleIn.y : b.y - (b.y - a.y) / 3;
+
+            let t = segFrac;
+            for (let iter = 0; iter < 8; iter++) {
+              const xAt = cubicBezier(a.x, cp1x, cp2x, b.x, t);
+              const dxAt = cubicBezierDerivative(a.x, cp1x, cp2x, b.x, t);
+              if (Math.abs(dxAt) < 1e-10) break;
+              t -= (xAt - fx) / dxAt;
+              t = Math.max(0, Math.min(1, t));
+            }
+            return cubicBezier(a.y, cp1y, cp2y, b.y, t);
+          }
+        }
+        return sorted[sorted.length - 1].y;
+      }
+
+      // Drawing
+      function draw() {
+        const dpr = window.devicePixelRatio || 1;
+        const w = cv.width / dpr, h = cv.height / dpr;
+        ctx.clearRect(0, 0, w, h);
+
+        const p = plotArea();
+        const pr = params();
+
+        // Canvas BG
+        ctx.fillStyle = '#555555'; // Hardcoded from var(--bg-canvas)
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+
+        drawGridAndAxes(p, pr);
+
+        // Draw Inactive Spline faint
+        const inactiveAxis = activeAxis === 'pan' ? 'tilt' : 'pan';
+        const sortedInactive = sortedPoints(inactiveAxis);
+        if (sortedInactive.length >= 2) {
+          drawBezierCurve(sortedInactive, p, getInactiveColor(), 0.15);
+        }
+
+        // Draw Active Spline
+        const sortedActive = sortedPoints(activeAxis);
+        if (sortedActive.length >= 2) {
+          drawBezierCurve(sortedActive, p, getActiveColor(), 1.0);
+        }
+
+        // Draw Active Points
+        sortedActive.forEach((pt, i) => {
+          const origIdx = splines[activeAxis].indexOf(pt);
+          drawPoint(pt, origIdx === selected, i === 0 || i === sortedActive.length - 1, getActiveColor());
+        });
+
+        if (playheadFrac > 0 || isPlaying) drawPlayhead(p, pr);
+
+        // Output texts
+        ctx.font = '11px Inter, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#FFD500';
+        ctx.fillText(`Pan Max: ${pr.maxAnglePan}°`, p.x + 10, p.y + 16);
+        ctx.fillStyle = '#5b9bd5';
+        ctx.fillText(`Tilt Max: ${pr.maxAngleTilt}°`, p.x + 10, p.y + 32);
+
+        updateInfo();
+      }
+
+      function drawGridAndAxes(p, pr) {
+        // Timeline ticks
+        const tStep = niceStep(pr.totalTime, p.w, 80);
+        for (let t = 0; t <= pr.totalTime + 0.0001; t += tStep) {
+          const x = p.x + (t / pr.totalTime) * p.w;
+          ctx.strokeStyle = Math.abs(t % (tStep * 5)) < tStep * 0.1 ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.15)';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(x, p.y); ctx.lineTo(x, p.y + p.h); ctx.stroke();
+
+          ctx.font = '10px Inter, sans-serif';
+          ctx.fillStyle = '#999'; // --text-dim
+          ctx.textAlign = 'center';
+          ctx.fillText(t.toFixed(1) + 's', x, p.y + p.h + 16);
+        }
+
+        // Horizontal Grid (Fractional 0 to 1)
+        for (let f = 0; f <= 1.01; f += 0.25) {
+          const y = p.y + (1 - f) * p.h;
+          ctx.strokeStyle = f === 0 || f === 1 ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.15)';
+          ctx.beginPath(); ctx.moveTo(p.x, y); ctx.lineTo(p.x + p.w, y); ctx.stroke();
+
+          ctx.font = '10px Inter, sans-serif';
+          ctx.fillStyle = '#666'; // --text-muted
+          ctx.textAlign = 'right';
+          ctx.fillText((f * 100).toFixed(0) + '%', p.x - 8, y + 4);
+        }
+
+        ctx.strokeStyle = '#555555'; // --border
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y + p.h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(p.x, p.y + p.h); ctx.lineTo(p.x + p.w, p.y + p.h); ctx.stroke();
+      }
+
+      function drawBezierCurve(sorted, p, color, opacity) {
+        ctx.beginPath();
+        const [sx, sy] = frac2canvas(sorted[0].x, sorted[0].y);
+        ctx.moveTo(sx, sy);
+
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const a = sorted[i], b = sorted[i + 1];
+          const cp1x = a.handleOut ? a.handleOut.x : a.x + (b.x - a.x) / 3;
+          const cp1y = a.handleOut ? a.handleOut.y : a.y + (b.y - a.y) / 3;
+          const cp2x = b.handleIn ? b.handleIn.x : b.x - (b.x - a.x) / 3;
+          const cp2y = b.handleIn ? b.handleIn.y : b.y - (b.y - a.y) / 3;
+
+          const [c1x, c1y] = frac2canvas(cp1x, cp1y);
+          const [c2x, c2y] = frac2canvas(cp2x, cp2y);
+          const [ex, ey] = frac2canvas(b.x, b.y);
+          ctx.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
+        }
+
+        ctx.strokeStyle = color;
+        // Make the active spline thicker so it stands out
+        ctx.lineWidth = opacity === 1.0 ? 3.5 : 1.5;
+        ctx.globalAlpha = opacity;
+
+        if (opacity === 1.0) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 12;
+        }
+
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1.0;
+      }
+
+      function drawPoint(pt, isSel, isEndpoint, color) {
+        const [cx, cy] = frac2canvas(pt.x, pt.y);
+
+        if (isSel) {
+          if (pt.handleIn) {
+            const [hx, hy] = frac2canvas(pt.handleIn.x, pt.handleIn.y);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(hx, hy); ctx.stroke();
+            ctx.beginPath(); ctx.arc(hx, hy, HANDLE_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = color; ctx.fill();
+          }
+          if (pt.handleOut) {
+            const [hx, hy] = frac2canvas(pt.handleOut.x, pt.handleOut.y);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(hx, hy); ctx.stroke();
+            ctx.beginPath(); ctx.arc(hx, hy, HANDLE_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = color; ctx.fill();
+          }
+        }
+
+        const r = isSel ? 6 : POINT_RADIUS;
+        ctx.save();
+        ctx.translate(cx, cy);
+        if (!isEndpoint) ctx.rotate(Math.PI / 4); // diamonds for internal
+        ctx.beginPath();
+        if (isEndpoint) {
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+        } else {
+          ctx.rect(-r / Math.SQRT2, -r / Math.SQRT2, r * Math.SQRT2, r * Math.SQRT2);
+        }
+        ctx.fillStyle = isSel ? color : (isEndpoint ? '#7a8da6' : color);
+        ctx.fill();
+        ctx.strokeStyle = isSel ? '#fff' : 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = isSel ? 1.5 : 1;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawPlayhead(p, pr) {
+        const x = p.x + playheadFrac * p.w;
+        ctx.strokeStyle = '#e05050'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(x, p.y); ctx.lineTo(x, p.y + p.h); ctx.stroke();
+
+        let yy = p.y + p.h - 10;
+
+        // Pan Dot
+        const panSpline = sortedPoints('pan');
+        if (panSpline.length >= 2) {
+          const yFrac = evalSpline(panSpline, playheadFrac);
+          const [px, py] = frac2canvas(playheadFrac, yFrac);
+          ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fillStyle = '#FFD500'; ctx.fill();
+
+          ctx.font = '600 11px Inter'; ctx.textAlign = 'left';
+          ctx.fillText(`P: ${(yFrac * pr.maxAnglePan).toFixed(1)}°`, x + 6, yy);
+          yy -= 16;
+        }
+
+        // Tilt Dot
+        const tiltSpline = sortedPoints('tilt');
+        if (tiltSpline.length >= 2) {
+          const yFrac = evalSpline(tiltSpline, playheadFrac);
+          const [px, py] = frac2canvas(playheadFrac, yFrac);
+          ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fillStyle = '#5b9bd5'; ctx.fill();
+
+          ctx.font = '600 11px Inter'; ctx.textAlign = 'left';
+          ctx.fillText(`T: ${(yFrac * pr.maxAngleTilt).toFixed(1)}°`, x + 6, yy);
+        }
+      }
+
+      function niceStep(range, pixels, minSpacing) {
+        const count = Math.max(1, Math.floor(pixels / minSpacing));
+        const raw = range / count;
+        const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+        const norm = raw / mag;
+        const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+        return nice * mag;
+      }
+
+      function updateInfo() {
+        const pr = params();
+        $('infoDisplay').textContent =
+          `Pan: ${splines.pan.length} pts | Tilt: ${splines.tilt.length} pts`;
+      }
+
+      // Interaction
+      function hitTest(mx, my) {
+        const pts = getPoints();
+        for (let i = 0; i < pts.length; i++) {
+          const pt = pts[i];
+          if (i === selected) {
+            if (pt.handleIn) {
+              const [hx, hy] = frac2canvas(pt.handleIn.x, pt.handleIn.y);
+              if (Math.hypot(mx - hx, my - hy) < HIT_RADIUS) return { type: 'handleIn', idx: i };
+            }
+            if (pt.handleOut) {
+              const [hx, hy] = frac2canvas(pt.handleOut.x, pt.handleOut.y);
+              if (Math.hypot(mx - hx, my - hy) < HIT_RADIUS) return { type: 'handleOut', idx: i };
+            }
+          }
+          const [cx, cy] = frac2canvas(pt.x, pt.y);
+          if (Math.hypot(mx - cx, my - cy) < HIT_RADIUS) return { type: 'point', idx: i };
+        }
+        return null;
+      }
+
+      function mousePos(e) {
+        const r = cv.getBoundingClientRect();
+        return [e.clientX - r.left, e.clientY - r.top];
+      }
+
+      cv.addEventListener('mousedown', e => {
+        if (e.button === 2) return;
+        hideCtxMenu();
+        const [mx, my] = mousePos(e);
+        const hit = hitTest(mx, my);
+
+        if (hit) {
+          dragging = hit;
+          if (hit.type === 'point') selected = hit.idx;
+          cv.style.cursor = 'grabbing';
+        } else {
+          const p = plotArea();
+          if (my > p.y + p.h && my < p.y + p.h + 30) {
+            playheadFrac = Math.max(0, Math.min(1, (mx - p.x) / p.w));
+            draw();
+            return;
+          }
+          if (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h) {
+            const [fx, fy] = canvas2frac(mx, my);
+            const clampedX = Math.max(0, Math.min(1, fx));
+            const clampedY = Math.max(0, Math.min(1, fy));
+            const newPt = { x: clampedX, y: clampedY, handleIn: null, handleOut: null, mode: 'auto' };
+            getPoints().push(newPt);
+
+            const sorted = sortedPoints(activeAxis);
+            sorted.forEach((pt, i) => { if (pt.mode === 'auto') autoTangent(sorted, i); });
+            selected = getPoints().length - 1;
+            dragging = { type: 'point', idx: selected };
+            cv.style.cursor = 'grabbing';
+            draw();
+          } else {
+            selected = -1;
+            draw();
+          }
+        }
+      });
+
+      cv.addEventListener('mousemove', e => {
+        const [mx, my] = mousePos(e);
+        if (dragging) {
+          const [fx, fy] = canvas2frac(mx, my);
+          const pt = getPoints()[dragging.idx];
+
+          if (dragging.type === 'point') {
+            const dx = Math.max(0, Math.min(1, fx)) - pt.x;
+            const dy = Math.max(0, Math.min(1, fy)) - pt.y;
+            pt.x = Math.max(0, Math.min(1, fx));
+            pt.y = Math.max(0, Math.min(1, fy));
+            if (pt.handleIn) { pt.handleIn.x += dx; pt.handleIn.y += dy; }
+            if (pt.handleOut) { pt.handleOut.x += dx; pt.handleOut.y += dy; }
+          } else if (dragging.type === 'handleOut') {
+            pt.handleOut = { x: fx, y: fy };
+            if (pt.mode === 'smooth' && pt.handleIn) {
+              const dx = fx - pt.x, dy = fy - pt.y;
+              const len = Math.hypot(pt.handleIn.x - pt.x, pt.handleIn.y - pt.y);
+              const dist = Math.hypot(dx, dy) || 1;
+              pt.handleIn = { x: pt.x - dx / dist * len, y: pt.y - dy / dist * len };
+            }
+          } else if (dragging.type === 'handleIn') {
+            pt.handleIn = { x: fx, y: fy };
+            if (pt.mode === 'smooth' && pt.handleOut) {
+              const dx = fx - pt.x, dy = fy - pt.y;
+              const len = Math.hypot(pt.handleOut.x - pt.x, pt.handleOut.y - pt.y);
+              const dist = Math.hypot(dx, dy) || 1;
+              pt.handleOut = { x: pt.x - dx / dist * len, y: pt.y - dy / dist * len };
+            }
+          }
+          draw();
+          return;
+        }
+
+        const hit = hitTest(mx, my);
+        const p = plotArea();
+
+        if (hit) { cv.style.cursor = 'grab'; }
+        else if (my > p.y + p.h && my < p.y + p.h + 30) { cv.style.cursor = 'pointer'; }
+        else if (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h) { cv.style.cursor = 'crosshair'; }
+        else { cv.style.cursor = 'default'; }
+      });
+
+      cv.addEventListener('mouseup', () => {
+        if (dragging && dragging.type === 'point') {
+          const sorted = sortedPoints(activeAxis);
+          sorted.forEach((pt, i) => { if (pt.mode === 'auto') autoTangent(sorted, i); });
+          draw();
+        }
+        dragging = null;
+        cv.style.cursor = 'crosshair';
+      });
+
+      cv.addEventListener('mouseleave', () => { dragging = null; });
+
+      cv.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        const hit = hitTest(...mousePos(e));
+        if (hit && hit.type === 'point') {
+          selected = hit.idx; draw();
+          ctxMenu.style.display = 'block';
+          ctxMenu.style.left = e.clientX + 'px';
+          ctxMenu.style.top = e.clientY + 'px';
+        }
+      });
+
+      document.addEventListener('click', () => { ctxMenu.style.display = 'none'; });
+
+      ctxMenu.querySelectorAll('.ctx-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const pts = getPoints();
+          if (selected < 0 || selected >= pts.length) return;
+          const pt = pts[selected];
+          const action = item.dataset.action;
+
+          if (action === 'delete') {
+            pts.splice(selected, 1); selected = -1;
+            const sorted = sortedPoints(activeAxis);
+            sorted.forEach((p, i) => { if (p.mode === 'auto') autoTangent(sorted, i); });
+          } else {
+            pt.mode = action;
+            if (action === 'auto') {
+              const sorted = sortedPoints(activeAxis);
+              const si = sorted.indexOf(pt);
+              if (si >= 0) autoTangent(sorted, si);
+            }
+          }
+          draw();
+        });
+      });
+
+      // Playback
+      $('btnPlay').addEventListener('click', togglePlay);
+      document.addEventListener('keydown', e => {
+        if (e.target.tagName === 'INPUT') return;
+        if (e.key === ' ' || e.key === 'Space') { e.preventDefault(); togglePlay(); }
+        else if ((e.key === 'Delete' || e.key === 'Backspace') && selected >= 0) {
+          getPoints().splice(selected, 1); selected = -1;
+          const sorted = sortedPoints(activeAxis);
+          sorted.forEach((p, i) => { if (p.mode === 'auto') autoTangent(sorted, i); });
+          draw();
+        }
+      });
+
+      function togglePlay() { isPlaying ? stopPlay() : startPlay(); }
+      function startPlay() {
+        isPlaying = true; playheadFrac = 0; playStartTime = performance.now();
+        $('btnPlay').textContent = '■'; $('btnPlay').classList.add('playing');
+        playLoop();
+      }
+      function stopPlay() {
+        isPlaying = false; if (playRAF) cancelAnimationFrame(playRAF);
+        $('btnPlay').textContent = '▶'; $('btnPlay').classList.remove('playing');
+        draw();
+      }
+      function playLoop() {
+        if (!isPlaying) return;
+        const elapsed = (performance.now() - playStartTime) / 1000;
+        playheadFrac = elapsed / params().totalTime;
+        if (playheadFrac >= 1) { playheadFrac = 1; draw(); stopPlay(); return; }
+        draw(); playRAF = requestAnimationFrame(playLoop);
+      }
+
+      // Generation & Network
+      function generateTrajectoryForDict() {
+        const pr = params();
+        const tRange = pr.totalTime;
+
+        function calcSpline(axisStr) {
+          const sorted = sortedPoints(axisStr);
+          if (sorted.length < 2) return [];
+          const out = [];
+          for (let t = 0; t <= tRange + pr.dt * 0.5; t += pr.dt) {
+            const frac = t / tRange;
+            const yFrac = evalSpline(sorted, frac);
+            const angleDeg = yFrac * getMaxAngle(axisStr);
+            const steps = Math.round((angleDeg / 360) * pr.stepsPerRev);
+            out.push([parseFloat(t.toFixed(6)), steps]);
+          }
+          // snap final
+          const lastPt = sorted[sorted.length - 1];
+          const finalSteps = Math.round((lastPt.y * getMaxAngle(axisStr) / 360) * pr.stepsPerRev);
+          if (out.length > 0) out[out.length - 1][1] = finalSteps;
+          return out;
+        }
+
+        return {
+          pan: calcSpline('tilt'),
+          tilt: calcSpline('pan')
+        };
+      }
+
+      $('btnSend').addEventListener('click', async () => {
+        const data = generateTrajectoryForDict();
+        if (!data.pan.length && !data.tilt.length) { showToastMsg('Add points first', true); return; }
+
+        const serverUrl = 'http://127.0.0.1:8742/trajectory';
+        try {
+          const resp = await fetch(serverUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          if (!resp.ok) throw new Error('Send Failed');
+          showToastMsg(`Sent Dual Splines → Pi`);
+          lastSentTrajectory = data;
+          $('btnReverse').style.display = 'inline-block';
+        } catch (err) {
+          showToastMsg(err.message, true);
+        }
+      });
+
+      $('btnReverse').addEventListener('click', async () => {
+        if (!lastSentTrajectory) return;
+
+        // Reverse the arrays, but preserve the forwards time progression.
+        // We need to invert the position array.
+        // E.g. forward went from 0 to 1000 steps.
+        // Backwards should go from 0 to -1000 steps, running the curve exactly in reverse time.
+        function reverseTraj(traj) {
+          if (!traj || traj.length === 0) return [];
+          const reversed = [];
+          const maxSteps = traj[traj.length - 1][1];
+          // We read array backwards, treating the final point as our new t=0.
+          // By subtracting maxSteps from the reversed step values, we get a curve that 
+          // starts at 0 and ends at -maxSteps.
+          for (let i = 0; i < traj.length; i++) {
+            const forwardTime = traj[i][0];
+            const backwardSteps = traj[traj.length - 1 - i][1];
+            reversed.push([forwardTime, backwardSteps - maxSteps]);
+          }
+          return reversed;
+        }
+
+        const revData = {
+          pan: reverseTraj(lastSentTrajectory.pan),
+          tilt: reverseTraj(lastSentTrajectory.tilt)
+        };
+
+        const serverUrl = 'http://127.0.0.1:8742/trajectory';
+        try {
+          const resp = await fetch(serverUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(revData),
+          });
+          if (!resp.ok) throw new Error('Reverse Failed');
+          showToastMsg(`Sent Reverse Trajectory → Pi`);
+          // Note: we do not set lastSentTrajectory to revData, 
+          // so clicking reverse multiple times won't constantly toggle it back and forth
+          // unless desired. Let's just keep the last "Forward" trajectory as the reversible one.
+        } catch (err) {
+          showToastMsg(err.message, true);
+        }
+      });
+
+      // Actions
+      $('btnClear').addEventListener('click', () => {
+        splines[activeAxis] = [];
+        selected = -1; draw();
+      });
+
+      $('btnPreset').addEventListener('click', () => {
+        splines[activeAxis] = [
+          { x: 0, y: 0, handleIn: null, handleOut: { x: 0.35, y: 0 }, mode: 'smooth' },
+          { x: 1, y: 1, handleIn: { x: 0.65, y: 1 }, handleOut: null, mode: 'smooth' }
+        ];
+        selected = -1; draw(); showToastMsg('Loaded S-curve');
+      });
+
+      $('btnMatch').addEventListener('click', () => {
+        // Deep copy pan to tilt
+        splines.tilt = JSON.parse(JSON.stringify(splines.pan));
+        showToastMsg('Copied Pan shape to Tilt');
+        draw();
+      });
+
+      [$('inTime'), $('inAnglePan'), $('inAngleTilt')].forEach(el =>
+        el.addEventListener('input', () => draw())
+      );
+
+      function showToastMsg(msg, isErr = false) {
+        toast.textContent = msg;
+        toast.className = 'toast' + (isErr ? ' error' : '') + ' show';
+        setTimeout(() => toast.classList.remove('show'), 2500);
+      }
+
+      function resize() {
+        const wrap = cv.parentElement; const dpr = window.devicePixelRatio || 1;
+        cv.width = wrap.clientWidth * dpr; cv.height = wrap.clientHeight * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); draw();
+      }
+      window.addEventListener('resize', resize);
+      resize();
+    })();
+  </script>
+</body>
+
+</html>
