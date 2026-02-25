@@ -1,0 +1,38 @@
+# --- ROS 2 / Colcon ---
+# These folders are generated every time you 'colcon build'
+# They are huge and should NEVER be on GitHub
+build/
+install/
+log/
+.catkin_tools/
+
+# --- Python & AI ---
+# Excludes local environments and cached bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv/
+env/
+venv/
+.python-version
+
+# --- axi6_venv ---
+# axi6_venv/legacy/
+# axi6_venv/vision/models/
+# axi6_venv/venv/
+# axi6_venv/.vscode/
+
+# --- Machine Learning / Data ---
+# Keeps your repo light; don't upload large datasets or model weights
+*.pt
+*.pth
+*.onnx
+*.weights
+data/
+outputs/
+
+# --- macOS / IDEs ---
+.DS_Store
+.vscode/
+.idea/
