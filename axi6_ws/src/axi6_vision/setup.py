@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'tracker_node = axi6_vision.tracker_node:main',
         ],
     },
 )
