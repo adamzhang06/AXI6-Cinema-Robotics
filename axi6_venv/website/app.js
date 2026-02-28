@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let isDragging = false;
     let currentTime = 0; // State variable to preserve time across zooms
+    let preciseTime = 0; // Unsnapped accumulator for smooth playback
     
     // Playback state
     let isPlaying = false;
@@ -95,16 +96,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper to jump to a specific time, update UI strictly, and keep playhead anchored during play
     function setTime(time, isSkip = false) {
-        currentTime = Math.max(0, Math.min(durationSeconds, time));
+        preciseTime = Math.max(0, Math.min(durationSeconds, time));
+        
+        // Snap time to the nearest frame (30fps)
+        const frameDuration = 1 / fps;
+        const snappedTime = Math.round(preciseTime / frameDuration) * frameDuration;
+        
+        currentTime = Math.max(0, Math.min(durationSeconds, snappedTime));
         
         const newX = currentTime * pixelsPerSecond;
         playhead.style.left = `${newX}px`;
         
-        // Format time (HH:MM:SS:FF)
-        const hours = Math.floor(currentTime / 3600);
-        const minutes = Math.floor((currentTime % 3600) / 60);
-        const seconds = Math.floor(currentTime % 60);
-        const frames = Math.floor((currentTime % 1) * fps);
+        // Format time (HH:MM:SS:FF) avoiding floating point precision errors
+        const safeTime = Math.round(currentTime * 1000) / 1000;
+        const hours = Math.floor(safeTime / 3600);
+        const minutes = Math.floor((safeTime % 3600) / 60);
+        const seconds = Math.floor(safeTime % 60);
+        const frames = Math.round((safeTime % 1) * fps);
         
         const formattedTime = 
             String(hours).padStart(2, '0') + ':' +
@@ -117,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Update absolute frame counter UI
         if (frameCounter) {
-            const absoluteFrame = Math.floor(currentTime * fps);
+            const absoluteFrame = Math.round(safeTime * fps);
             frameCounter.textContent = absoluteFrame;
         }
         
@@ -274,11 +282,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const deltaSeconds = (timestamp - lastFrameTime) / 1000;
         lastFrameTime = timestamp;
         
-        const nextTime = currentTime + (deltaSeconds * playDirection);
+        const nextTime = preciseTime + (deltaSeconds * playDirection);
         setTime(nextTime);
         
         // Stop playback if we hit the actual boundary while moving in that direction
-        if ((currentTime <= 0 && playDirection === -1) || (currentTime >= durationSeconds && playDirection === 1)) {
+        if ((preciseTime <= 0 && playDirection === -1) || (preciseTime >= durationSeconds && playDirection === 1)) {
             stopPlayback();
         } else {
             playAnimationId = requestAnimationFrame(playLoop);
@@ -291,11 +299,11 @@ document.addEventListener('DOMContentLoaded', () => {
         playDirection = direction;
         
         // If at the end and trying to play forward, restart from 0
-        if (playDirection === 1 && currentTime >= durationSeconds - 0.001) {
+        if (playDirection === 1 && preciseTime >= durationSeconds - 0.001) {
             setTime(0, true);
         }
         // If at the start and trying to play backwards, restart from end
-        if (playDirection === -1 && currentTime <= 0.001) {
+        if (playDirection === -1 && preciseTime <= 0.001) {
             setTime(durationSeconds, true);
         }
         
