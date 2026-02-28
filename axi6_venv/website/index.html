@@ -58,13 +58,13 @@
                 </div>
 
                 <!-- Bottom Section: Timeline -->
-                <div class="flex flex-col gap-[2px] shrink-0 h-full" id="timeline">
+                <div class="flex flex-col gap-[2px] h-full overflow-hidden" id="timeline">
 
                     <!-- Split Top Header Area -->
                     <div class="h-[48px] grid grid-cols-[200px_1fr] gap-[2px] w-full shrink-0">
 
                         <!-- Left Settings Area (Matches Left Sidebar color) -->
-                        <div class="bg-[var(--bg-main)] p-2 flex items-center h-full">
+                        <div class="bg-[var(--bg-main)] p-2 flex items-center justify-center h-full">
                             <h2 class="panel-header !mb-0 font-mono tracking-wider text-[var(--highlight)] text-lg"
                                 id="timeline-timer">00:00:00:00</h2>
                         </div>
@@ -130,7 +130,7 @@
                     </div>
 
                     <!-- Main Dark Area for Bezier Curves -->
-                    <div class="flex-1 bg-[#0a0a0c] relative overflow-hidden flex">
+                    <div class="flex-1 bg-[#0a0a0c] relative overflow-hidden flex min-w-0">
                         <!-- The tracks area on the left (matches settings width) -->
                         <div class="w-[200px] bg-[var(--bg-main)] shrink-0 flex flex-col pt-[2px]">
                             <!-- Slide Track -->
@@ -157,25 +157,27 @@
                         </div>
 
                         <!-- The actual curves will be rendered here -->
-                        <div class="flex-1 relative cursor-text group" id="curve-area">
+                        <div class="flex-1 relative cursor-text group overflow-x-auto min-w-0" id="curve-area">
+                            <div id="timeline-content" class="relative h-full" style="width: 6000px;">
+                                <!-- Scrubbing Active Indicator Line -->
+                                <div id="drag-indicator"
+                                    class="absolute top-0 left-0 right-0 h-[1px] bg-red-600/70 z-50 pointer-events-none">
+                                </div>
 
-                            <!-- Scrubbing Active Indicator Line -->
-                            <div id="drag-indicator"
-                                class="absolute top-0 left-0 right-0 h-[1px] bg-red-600/70 z-50 pointer-events-none">
-                            </div>
+                                <!-- Timeline Ruler (Tick marks and time labels) -->
+                                <div id="timeline-ruler"
+                                    class="absolute top-0 left-0 right-0 h-[30px] border-b border-[#1B1B1D] bg-[#0a0a0c]/80 z-20 pointer-events-none origin-top overflow-hidden">
+                                    <!-- Tick marks will be injected here via JS -->
+                                </div>
 
-                            <!-- Timeline Ruler (Tick marks and time labels) -->
-                            <div id="timeline-ruler"
-                                class="absolute top-0 left-0 right-0 h-[30px] border-b border-[#1B1B1D] bg-[#0a0a0c]/80 z-20 pointer-events-none origin-top overflow-hidden">
-                                <!-- Tick marks will be injected here via JS -->
-                            </div>
-
-                            <!-- Vertical Playhead Line (z-30 to stay above z-20 ruler) -->
-                            <div id="playhead" class="absolute top-0 bottom-0 w-[2px] bg-red-600 z-30 cursor-ew-resize"
-                                style="left: 0px;">
-                                <!-- Draggable Tab at the top -->
-                                <div
-                                    class="absolute -top-[1px] -left-[6px] w-[14px] h-[16px] bg-red-600 rounded-b-sm border-t border-red-400">
+                                <!-- Vertical Playhead Line (z-30 to stay above z-20 ruler) -->
+                                <div id="playhead"
+                                    class="absolute top-0 bottom-0 w-[2px] bg-red-600/70 z-30 cursor-ew-resize"
+                                    style="left: 0px;">
+                                    <!-- Draggable Tab at the top -->
+                                    <div
+                                        class="absolute -top-[1px] -left-[6px] w-[14px] h-[16px] bg-red-600 rounded-b-sm border-t border-red-400">
+                                    </div>
                                 </div>
                             </div>
                         </div>

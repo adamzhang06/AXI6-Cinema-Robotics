@@ -3,16 +3,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const curveArea = document.getElementById('curve-area');
     const timerDisplay = document.getElementById('timeline-timer');
     const dragIndicator = document.getElementById('drag-indicator');
+    const timelineContent = document.getElementById('timeline-content');
     
     let isDragging = false;
     
     // Configuration: Total timeline duration in seconds and framerate
-    const durationSeconds = 10; 
+    const durationSeconds = 60; // 1 minute max for now
     const fps = 30;
+    const pixelsPerSecond = 100; // 100 pixels per second
+    
+    if (timelineContent) {
+        timelineContent.style.width = `${durationSeconds * pixelsPerSecond}px`;
+    }
     
     // Function to calculate and update playhead position and timer text
     function updatePlayheadPosition(clientX) {
-        const rect = curveArea.getBoundingClientRect();
+        const rect = timelineContent.getBoundingClientRect();
         let x = clientX - rect.left;
         
         // Constrain playhead within the curve area bounds
@@ -50,22 +56,94 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
     });
     
+    // Auto-scrolling variables
+    let scrollAnimationFrame = null;
+    let scrollVelocity = 0;
+    let lastClientX = 0; // Keep track of JS mouse position
+    
     // Update playhead on mouse move across the whole document
     document.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
-        updatePlayheadPosition(e.clientX);
+        // Auto-scrolling logic based on viewport proximity
+        const rect = curveArea.getBoundingClientRect();
+        
+        // Prevent the playhead from visually sliding out of the box while dragging
+        let constrainedClientX = e.clientX;
+        if (constrainedClientX < rect.left) constrainedClientX = rect.left;
+        if (constrainedClientX > rect.right) constrainedClientX = rect.right;
+        
+        lastClientX = constrainedClientX;
+        
+        // Calculate the playhead position internally using the constrained X
+        updatePlayheadPosition(constrainedClientX);
+        
+        // Configuration for the auto-scroll speed and trigger zone
+        const edgeZone = 80; // Start scrolling 80px before the edge
+        const maxScrollSpeed = 25; // Maximum scroll speed
+        
+        // Distance from edges (negative means mouse is PAST the edge)
+        const distFromRight = rect.right - e.clientX;
+        const distFromLeft = e.clientX - rect.left;
+        
+        if (distFromRight < edgeZone) {
+            // Mouse is near or past the right edge
+            let intensity = 1 - Math.max(0, distFromRight) / edgeZone;
+            // Cap intensity at 1 (max speed) if we are way past the edge
+            if (intensity > 1) intensity = 1; 
+            scrollVelocity = intensity * maxScrollSpeed;
+            startAutoScroll();
+        } else if (distFromLeft < edgeZone) {
+            // Mouse is near or past the left edge
+            let intensity = 1 - Math.max(0, distFromLeft) / edgeZone; 
+            if (intensity > 1) intensity = 1;
+            scrollVelocity = -intensity * maxScrollSpeed;
+            startAutoScroll();
+        } else {
+            // Mouse is strictly inside the safe zone
+            stopAutoScroll();
+        }
     });
+    
+    // Continuously scroll the curve area horizontally
+    function autoScrollLoop() {
+        if (!isDragging || scrollVelocity === 0) {
+            stopAutoScroll();
+            return;
+        }
+        
+        curveArea.scrollLeft += scrollVelocity;
+        
+        // Since the window scrolled out from under us, we need to recalculate the playhead position based on that new scroll offset
+        updatePlayheadPosition(lastClientX);
+        
+        scrollAnimationFrame = requestAnimationFrame(autoScrollLoop);
+    }
+    
+    function startAutoScroll() {
+        if (!scrollAnimationFrame) {
+            autoScrollLoop();
+        }
+    }
+    
+    function stopAutoScroll() {
+        if (scrollAnimationFrame) {
+            cancelAnimationFrame(scrollAnimationFrame);
+            scrollAnimationFrame = null;
+        }
+        scrollVelocity = 0;
+    }
     
     // Stop dragging when mouse goes up anywhere
     document.addEventListener('mouseup', () => {
         if (isDragging) {
             isDragging = false;
+            stopAutoScroll();
             document.body.style.userSelect = '';
         }
     });
 
     // Clicking anywhere on the background jumps the playhead to that spot
-    curveArea.addEventListener('mousedown', (e) => {
+    timelineContent.addEventListener('mousedown', (e) => {
         if (e.target !== playhead && !playhead.contains(e.target)) {
             updatePlayheadPosition(e.clientX);
             isDragging = true;
@@ -91,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!ruler) return;
         ruler.innerHTML = ''; // Clear existing
         
-        const width = curveArea.getBoundingClientRect().width;
+        const width = timelineContent.getBoundingClientRect().width;
         if (width === 0) return; // Not visible yet
         
         // Configuration for ticks
