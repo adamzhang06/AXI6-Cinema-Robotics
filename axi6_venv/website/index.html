@@ -59,13 +59,29 @@
                     <!-- Left Sidebar (Robot Controls) -->
                     <div class="bg-[var(--bg-main)] flex flex-col p-2" id="left-sidebar">
                         <h2 class="panel-header">Robot Controls</h2>
+
+                        <!-- Selected Track Info -->
+                        <div id="selected-track-info"
+                            class="flex items-center gap-2 mb-4 hidden bg-[#252528] p-2 rounded border border-white/5">
+                            <div id="selected-track-color" class="w-3 h-3 rounded-full font-mono"></div>
+                            <span id="selected-track-name"
+                                class="text-sm text-white font-bold opacity-90 tracking-wide"></span>
+                        </div>
+
                         <!-- Placeholder for controls -->
                     </div>
 
                     <!-- Top Viewport -->
                     <div class="bg-[var(--bg-main)] flex flex-col p-2 relative min-h-0 min-w-0" id="viewport">
-                        <div
-                            class="absolute top-4 left-4 z-10 bg-black/50 backdrop-blur-md px-2 py-1 flex items-center gap-2 rounded text-white/80">
+
+                        <!-- Default Viewport Label -->
+                        <h2 id="viewport-label"
+                            class="panel-header absolute top-2 left-2 z-10 text-white/100 pointer-events-none">VIEWPORT
+                        </h2>
+
+                        <!-- Camera Active Label -->
+                        <div id="camera-label-container"
+                            class="absolute top-4 left-4 z-10 bg-black/50 backdrop-blur-md px-2 py-1 flex items-center gap-2 rounded text-white/80 hidden pointer-events-none">
                             <h2 class="panel-header !mb-0">CAMERA</h2>
                             <div id="camera-indicator" class="w-2.5 h-2.5 rounded-full bg-red-600 hidden"
                                 style="animation: pulse 0.75s cubic-bezier(0.4, 0, 0.6, 1) infinite;"></div>
@@ -87,18 +103,18 @@
                     <div class="h-[48px] grid grid-cols-[200px_1fr] gap-[2px] w-full shrink-0">
 
                         <!-- Left Settings Area (Matches Left Sidebar color) -->
-                        <div class="bg-[var(--bg-main)] p-2 flex items-center justify-center h-full">
-                            <h2 class="panel-header !mb-0 font-mono tracking-wider text-[var(--highlight)] text-lg"
-                                id="timeline-timer">00:00:00:00</h2>
+                        <div class="bg-[var(--bg-main)] px-2 flex items-center justify-between h-full">
+                            <h2 class="panel-header !mb-0 text-white/100">TIMELINE</h2>
                         </div>
 
                         <!-- Right Functionality Area -->
-                        <div class="secondary-header justify-center relative !py-0">
+                        <div class="secondary-header justify-center relative !py-0 px-4">
+                            <!-- Left: Frame Info -->
                             <!-- Frame Counter -->
                             <div
                                 class="absolute left-4 font-mono text-[10px] text-white/40 tracking-wider flex items-center gap-1">
                                 <span>FRAME:</span>
-                                <span id="frame-counter" class="text-white/80 w-[18px] text-right">0</span>
+                                <span id="frame-counter" class="text-white/80 w-[24px] text-right">0</span>
                                 <span>/ 1800</span>
                             </div>
 
@@ -199,34 +215,49 @@
                     </div>
 
                     <!-- Main Dark Area for Bezier Curves -->
-                    <div class="flex-1 bg-[#0a0a0c] relative overflow-hidden flex min-w-0">
+                    <div class="flex-1 relative overflow-hidden grid grid-cols-[200px_1fr] gap-[2px] min-w-0">
+
                         <!-- The tracks area on the left (matches settings width) -->
-                        <div class="w-[200px] bg-[var(--bg-main)] shrink-0 flex flex-col pt-[2px]">
+                        <div class="bg-[var(--bg-main)] flex flex-col z-50">
+
+                            <!-- Timer (Aligned with Ruler) -->
+                            <div class="h-[30px] shrink-0 bg-[var(--bg-main)] flex items-center justify-center z-10 relative"
+                                style="border-bottom: 2px solid #0a0a0c;">
+                                <h2 class="font-mono tracking-wider text-[var(--highlight)] text-[14px]"
+                                    id="timeline-timer">00:00:00:00</h2>
+                            </div>
+
                             <!-- Slide Track -->
-                            <div class="track-block">
-                                <span class="track-title">Slide</span>
-                                <!-- Future track controls (visibility, lock, color etc) -->
-                                <div class="track-indicator bg-[var(--highlight)]"></div>
+                            <div class="track-block !h-auto flex-1 flex flex-col justify-center gap-6" id="track-slide"
+                                data-name="Slide" data-color="#FFD500">
+                                <div class="flex items-center justify-between w-full">
+                                    <span class="track-title">Slide</span>
+                                    <!-- Future track controls (visibility, lock, color etc) -->
+                                    <div class="track-indicator bg-[var(--highlight)] !mt-0 pointer-events-none"></div>
+                                </div>
                             </div>
 
                             <!-- Pan Track -->
-                            <div class="track-block">
-                                <span class="track-title">Pan</span>
-                                <div class="track-indicator bg-[#ff4444]"></div>
+                            <div class="track-block !h-auto flex-1 flex flex-col justify-center gap-6" id="track-pan"
+                                data-name="Pan" data-color="#ff4444">
+                                <div class="flex items-center justify-between w-full">
+                                    <span class="track-title">Pan</span>
+                                    <div class="track-indicator bg-[#ff4444] !mt-0 pointer-events-none"></div>
+                                </div>
                             </div>
 
                             <!-- Tilt Track -->
-                            <div class="track-block">
-                                <span class="track-title">Tilt</span>
-                                <div class="track-indicator bg-[#44ff44]"></div>
+                            <div class="track-block !h-auto flex-1 flex flex-col justify-center gap-6" id="track-tilt"
+                                data-name="Tilt" data-color="#44ff44">
+                                <div class="flex items-center justify-between w-full">
+                                    <span class="track-title">Tilt</span>
+                                    <div class="track-indicator bg-[#44ff44] !mt-0 pointer-events-none"></div>
+                                </div>
                             </div>
-
-                            <!-- Empty area for future tracks -->
-                            <div class="flex-1"></div>
                         </div>
 
                         <!-- The actual curves will be rendered here -->
-                        <div class="flex-1 relative cursor-text group overflow-x-auto min-w-0" id="curve-area">
+                        <div class="bg-[#0a0a0c] relative cursor-text group overflow-x-auto min-w-0" id="curve-area">
                             <div id="timeline-content" class="relative h-full" style="width: 6000px;">
                                 <!-- Scrubbing Active Indicator Line -->
                                 <div id="drag-indicator"

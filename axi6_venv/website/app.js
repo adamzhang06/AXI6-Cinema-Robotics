@@ -405,6 +405,35 @@ document.addEventListener('DOMContentLoaded', () => {
     drawRuler();
     window.addEventListener('resize', drawRuler);
     
+    // --- Track Selection --- //
+    const trackBlocks = document.querySelectorAll('.track-block');
+    const selectedTrackInfo = document.getElementById('selected-track-info');
+    const selectedTrackName = document.getElementById('selected-track-name');
+    const selectedTrackColor = document.getElementById('selected-track-color');
+
+    trackBlocks.forEach(block => {
+        block.addEventListener('click', () => {
+            // Remove highlight from all tracks
+            trackBlocks.forEach(b => {
+                b.classList.remove('bg-[#FFD500]/15', 'border-l-4', 'border-l-[#FFD500]');
+                b.classList.add('border-b', 'border-[#0a0a0c]');
+            });
+            
+            // Add highlight to clicked track
+            block.classList.remove('border-b', 'border-[#0a0a0c]');
+            block.classList.add('bg-[#FFD500]/15', 'border-l-4', 'border-l-[#FFD500]');
+            
+            // Update sidebar info
+            const name = block.getAttribute('data-name');
+            const color = block.getAttribute('data-color');
+            
+            if (selectedTrackName) selectedTrackName.textContent = name;
+            if (selectedTrackColor) selectedTrackColor.style.backgroundColor = color;
+            
+            if (selectedTrackInfo) selectedTrackInfo.classList.remove('hidden');
+        });
+    });
+    
     // --- WebCam Initialization --- //
     let isCameraOn = false;
     let webcamStream = null;
@@ -454,6 +483,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     videoElement.play();
                 }
                 videoElement.classList.remove('hidden');
+                
+                // Toggle Labels
+                const viewportLabel = document.getElementById('viewport-label');
+                const cameraLabelContainer = document.getElementById('camera-label-container');
+                if (viewportLabel) viewportLabel.classList.add('hidden');
+                if (cameraLabelContainer) cameraLabelContainer.classList.remove('hidden');
+                
                 if (indicator) indicator.classList.remove('hidden');
                 btnToggleCamera.classList.add('text-white');
                 btnToggleCamera.classList.remove('text-white/50');
@@ -468,6 +504,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 webcamStream = null;
 
                 videoElement.classList.add('hidden');
+                
+                // Toggle Labels
+                const viewportLabel = document.getElementById('viewport-label');
+                const cameraLabelContainer = document.getElementById('camera-label-container');
+                if (viewportLabel) viewportLabel.classList.remove('hidden');
+                if (cameraLabelContainer) cameraLabelContainer.classList.add('hidden');
+                
                 if (indicator) indicator.classList.add('hidden');
                 btnToggleCamera.classList.remove('text-white');
                 btnToggleCamera.classList.add('text-white/50');

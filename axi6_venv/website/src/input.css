@@ -28,7 +28,7 @@
 }
 
 @utility track-block {
-  @apply h-1/4 min-h-[60px] border-b border-[#0a0a0c] p-2 flex items-start justify-between transition-colors duration-200 hover:bg-[#252527] cursor-pointer;
+  @apply h-1/4 min-h-[60px] border-b-[2px] border-[#0a0a0c] p-2 flex items-start justify-between bg-[var(--bg-main)] transition-colors duration-200 hover:bg-[#252527] cursor-pointer;
 }
 
 @utility track-indicator {
