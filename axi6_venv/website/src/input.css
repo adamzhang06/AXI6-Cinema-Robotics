@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --color-main: #404040;
+  --color-highlight: #FFD500;
+  --color-gap: #111111;
+}
+
+:root {
+  --bg-main: var(--color-main);
+  --highlight: var(--color-highlight);
+  --bg-gap: var(--color-gap);
+}

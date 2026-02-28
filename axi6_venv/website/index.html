@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AXI6 Robot Cinema Robotics</title>
+    <!-- We load the compiled output from Tailwind -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="bg-[var(--bg-gap)] h-screen w-screen overflow-hidden text-[#cccccc] font-sans">
+
+    <!-- 4-Column Layout: Toolbar(50px) | LeftSidebar(320px) | Center(1fr) | RightSidebar(300px) -->
+    <div class="grid grid-cols-[50px_320px_1fr_300px] h-screen w-screen gap-[2px]">
+
+        <!-- 1. Far Left Toolbar -->
+        <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] text-xs p-2"
+            id="toolbar">
+            Toolbar
+        </div>
+
+        <!-- 2. Left Sidebar (Robot Controls) -->
+        <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] p-4"
+            id="left-sidebar">
+            <h2 class="text-white font-bold mb-4">Robot Controls</h2>
+            <!-- Placeholder for controls -->
+        </div>
+
+        <!-- 3. Center Workspace -->
+        <div class="grid grid-rows-[1fr_300px] gap-[2px]">
+            <!-- Top Viewport -->
+            <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] p-4"
+                id="viewport">
+                <h2 class="text-white font-bold mb-4">Viewport</h2>
+                <!-- 3D Scene / Camera Feed -->
+            </div>
+            <!-- Bottom Timeline -->
+            <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] p-4"
+                id="timeline">
+                <h2 class="text-white font-bold mb-4">Timeline</h2>
+                <!-- Graph Editor / Keyframes -->
+            </div>
+        </div>
+
+        <!-- 4. Right Sidebar (Settings) -->
+        <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] p-4"
+            id="right-sidebar">
+            <h2 class="text-white font-bold mb-4">Settings</h2>
+            <!-- Export and Config -->
+        </div>
+
+    </div>
+
+    <!-- Our blank JavaScript file -->
+    <script src="app.js"></script>
+</body>
+
+</html>
