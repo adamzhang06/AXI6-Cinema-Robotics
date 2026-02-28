@@ -4,18 +4,78 @@ document.addEventListener('DOMContentLoaded', () => {
     const timerDisplay = document.getElementById('timeline-timer');
     const dragIndicator = document.getElementById('drag-indicator');
     const timelineContent = document.getElementById('timeline-content');
+    const zoomSlider = document.getElementById('zoom-slider');
+    const zoomInBtn = document.getElementById('zoom-in-btn');
+    const zoomOutBtn = document.getElementById('zoom-out-btn');
     
     let isDragging = false;
+    let currentTime = 0; // State variable to preserve time across zooms
     
     // Configuration: Total timeline duration in seconds and framerate
     const durationSeconds = 60; // 1 minute max for now
     const fps = 30;
-    const pixelsPerSecond = 100; // 100 pixels per second
     
-    if (timelineContent) {
-        timelineContent.style.width = `${durationSeconds * pixelsPerSecond}px`;
+    // Zoom configurations
+    let pixelsPerSecond = 100; // default
+    
+    function updateZoomRange() {
+        if (!zoomSlider || !curveArea) return;
+        
+        // Calculate min and max zoom limits
+        // Min zoom: fits entirely in the curve area
+        const minPixelsPerSecond = curveArea.clientWidth / durationSeconds;
+        // Max zoom: 1 second takes up the whole area
+        const maxPixelsPerSecond = curveArea.clientWidth;
+        
+        // Read slider 0-100
+        const zoomPercent = parseInt(zoomSlider.value, 10);
+        
+        // Logarithmic scale for smoother zooming ux
+        // But for simplicity let's stick to linear interpolation between min and max right now
+        pixelsPerSecond = minPixelsPerSecond + (maxPixelsPerSecond - minPixelsPerSecond) * (zoomPercent / 100);
+        
+        updateTimelineWidth();
+        
+        // Re-calculate the playhead position to stick to the same time
+        const newX = (currentTime / durationSeconds) * (durationSeconds * pixelsPerSecond);
+        playhead.style.left = `${newX}px`;
+        
+        // Ensure playhead stays in view
+        // Calculate where the playhead is relative to the scroll view
+        const targetScroll = newX - (curveArea.clientWidth / 2);
+        curveArea.scrollLeft = Math.max(0, targetScroll);
+        
+        drawRuler();
     }
     
+    // Set the physical width of the scrollable inner content
+    function updateTimelineWidth() {
+        if (!timelineContent) return;
+        const totalWidth = durationSeconds * pixelsPerSecond;
+        timelineContent.style.minWidth = `${totalWidth}px`;
+    }
+    
+    // Initialize
+    updateTimelineWidth();
+    
+    // Hook up zoom controls
+    if (zoomSlider) {
+        // Run once on load to establish bounds
+        setTimeout(updateZoomRange, 0); 
+        
+        zoomSlider.addEventListener('input', updateZoomRange);
+        
+        zoomInBtn.addEventListener('click', () => {
+            zoomSlider.value = Math.min(100, parseInt(zoomSlider.value) + 10);
+            updateZoomRange();
+        });
+        
+        zoomOutBtn.addEventListener('click', () => {
+            zoomSlider.value = Math.max(0, parseInt(zoomSlider.value) - 10);
+            updateZoomRange();
+        });
+    }
+
     // Function to calculate and update playhead position and timer text
     function updatePlayheadPosition(clientX) {
         const rect = timelineContent.getBoundingClientRect();
@@ -30,13 +90,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Calculate the time based on progress
         const progress = x / rect.width;
-        const totalTime = durationSeconds * progress;
+        currentTime = Math.max(0, Math.min(durationSeconds, durationSeconds * progress));
         
         // Format time (HH:MM:SS:FF)
-        const hours = Math.floor(totalTime / 3600);
-        const minutes = Math.floor((totalTime % 3600) / 60);
-        const seconds = Math.floor(totalTime % 60);
-        const frames = Math.floor((totalTime % 1) * fps);
+        const hours = Math.floor(currentTime / 3600);
+        const minutes = Math.floor((currentTime % 3600) / 60);
+        const seconds = Math.floor(currentTime % 60);
+        const frames = Math.floor((currentTime % 1) * fps);
         
         const formattedTime = 
             String(hours).padStart(2, '0') + ':' +
@@ -172,9 +232,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const width = timelineContent.getBoundingClientRect().width;
         if (width === 0) return; // Not visible yet
         
-        // Configuration for ticks
-        const majorTickInterval = 2; // 2 second intervals for labels to reduce clutter
-        const minorTickInterval = 0.25; // 0.25 second intervals for more frequent small ticks
+        // Configuration for ticks (Dynamic based on zoom scale)
+        let majorTickInterval = 1; // Default 1 second
+        let minorTickInterval = 0.25; // Default 0.25 seconds
+        
+        if (pixelsPerSecond > 800) {
+            // Very zoomed in
+            majorTickInterval = 0.25;
+            minorTickInterval = 1/fps; // Frame level ticks
+        } else if (pixelsPerSecond > 300) {
+            // Zoomed in
+            majorTickInterval = 0.5;
+            minorTickInterval = 0.1;
+        } else if (pixelsPerSecond < 30) {
+            // Very zoomed out
+            majorTickInterval = 5;
+            minorTickInterval = 1;
+        } else if (pixelsPerSecond < 60) {
+            // Zoomed out
+            majorTickInterval = 2;
+            minorTickInterval = 0.5;
+        }
         
         // Loop through the total duration and generate ticks
         for (let t = 0; t <= durationSeconds; t += minorTickInterval) {

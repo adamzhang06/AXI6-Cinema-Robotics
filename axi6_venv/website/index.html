@@ -124,6 +124,32 @@
 
                                 <!-- Right Separator -->
                                 <div class="w-[1px] h-4 bg-white/20"></div>
+
+                                <!-- Zoom Controls -->
+                                <div
+                                    class="flex items-center gap-1.5 ml-2 text-white/50 hover:text-white transition-colors">
+                                    <button
+                                        class="w-4 h-4 flex items-center justify-center p-0 hover:bg-white/10 rounded"
+                                        title="Zoom Out" id="zoom-out-btn">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                                        </svg>
+                                    </button>
+                                    <input type="range" id="zoom-slider" min="0" max="100" value="50"
+                                        class="w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[var(--highlight)]">
+                                    <button
+                                        class="w-4 h-4 flex items-center justify-center p-0 hover:bg-white/10 rounded"
+                                        title="Zoom In" id="zoom-in-btn">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
