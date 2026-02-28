@@ -8,8 +8,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomInBtn = document.getElementById('zoom-in-btn');
     const zoomOutBtn = document.getElementById('zoom-out-btn');
     
+    // Playback buttons
+    const btnSkipLeft = document.getElementById('btn-skip-left');
+    const btnPlayLeft = document.getElementById('btn-play-left');
+    const btnPause = document.getElementById('btn-pause');
+    const btnPlayRight = document.getElementById('btn-play-right');
+    const btnSkipRight = document.getElementById('btn-skip-right');
+    
     let isDragging = false;
     let currentTime = 0; // State variable to preserve time across zooms
+    
+    // Playback state
+    let isPlaying = false;
+    let playDirection = 1;
+    let lastFrameTime = 0;
+    let playAnimationId = null;
     
     // Configuration: Total timeline duration in seconds and framerate
     const durationSeconds = 60; // 1 minute max for now
@@ -76,21 +89,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Function to calculate and update playhead position and timer text
-    function updatePlayheadPosition(clientX) {
-        const rect = timelineContent.getBoundingClientRect();
-        let x = clientX - rect.left;
+    // Helper to jump to a specific time, update UI strictly, and keep playhead anchored during play
+    function setTime(time, isSkip = false) {
+        currentTime = Math.max(0, Math.min(durationSeconds, time));
         
-        // Constrain playhead within the curve area bounds
-        if (x < 0) x = 0;
-        if (x > rect.width) x = rect.width;
-        
-        // Move the playhead
-        playhead.style.left = `${x}px`;
-        
-        // Calculate the time based on progress
-        const progress = x / rect.width;
-        currentTime = Math.max(0, Math.min(durationSeconds, durationSeconds * progress));
+        const newX = currentTime * pixelsPerSecond;
+        playhead.style.left = `${newX}px`;
         
         // Format time (HH:MM:SS:FF)
         const hours = Math.floor(currentTime / 3600);
@@ -106,10 +110,48 @@ document.addEventListener('DOMContentLoaded', () => {
             
         // Update the display text
         timerDisplay.textContent = formattedTime;
+        
+        // If we are explicitly skipping to a point (Skip buttons, playhead jump), strictly center the camera on it
+        if (isSkip && curveArea) {
+            const rect = curveArea.getBoundingClientRect();
+            curveArea.scrollLeft = newX - (rect.width / 2);
+            return;
+        }
+
+        // If we are playing automatically, we want to smoothly scroll exactly with the playhead to keep it visible.
+        if (isPlaying && curveArea) {
+            const rect = curveArea.getBoundingClientRect();
+            const relativeX = newX - curveArea.scrollLeft;
+            const margin = 80; // Same visual edge distance as dragging threshold
+            
+            // If the playhead tries to pass the right margin, smoothly push the scroll window right exactly with it
+            if (relativeX > rect.width - margin && playDirection === 1) {
+                curveArea.scrollLeft = newX - (rect.width - margin);
+            // If the playhead tries to pass the left margin playing backwards, smoothly push left
+            } else if (relativeX < margin && playDirection === -1) {
+                curveArea.scrollLeft = newX - margin;
+            }
+        }
+    }
+
+    // Function to calculate and update playhead position and timer text from mouse coordinate
+    function updatePlayheadPosition(clientX) {
+        const rect = timelineContent.getBoundingClientRect();
+        let x = clientX - rect.left;
+        
+        // Constrain playhead within the curve area bounds
+        if (x < 0) x = 0;
+        if (x > rect.width) x = rect.width;
+        
+        const progress = x / rect.width;
+        const mappedTime = durationSeconds * progress;
+        
+        setTime(mappedTime);
     }
     
     // Start dragging when clicking on the playhead
     playhead.addEventListener('mousedown', (e) => {
+        stopPlayback(); // Stop any auto-play
         isDragging = true;
         // Prevent highlighting text while dragging
         document.body.style.userSelect = 'none';
@@ -205,11 +247,69 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clicking anywhere on the background jumps the playhead to that spot
     timelineContent.addEventListener('mousedown', (e) => {
         if (e.target !== playhead && !playhead.contains(e.target)) {
+            stopPlayback();
             updatePlayheadPosition(e.clientX);
             isDragging = true;
             document.body.style.userSelect = 'none';
         }
     });
+
+    // --- Playback Controls Logic --- //
+    
+    function playLoop(timestamp) {
+        if (!isPlaying) return;
+        
+        if (!lastFrameTime) lastFrameTime = timestamp;
+        
+        const deltaSeconds = (timestamp - lastFrameTime) / 1000;
+        lastFrameTime = timestamp;
+        
+        const nextTime = currentTime + (deltaSeconds * playDirection);
+        setTime(nextTime);
+        
+        // Stop playback if we hit the actual boundary while moving in that direction
+        if ((currentTime <= 0 && playDirection === -1) || (currentTime >= durationSeconds && playDirection === 1)) {
+            stopPlayback();
+        } else {
+            playAnimationId = requestAnimationFrame(playLoop);
+        }
+    }
+
+    function startPlayback(direction) {
+        if (isPlaying && playDirection === direction) return; // already playing
+        
+        playDirection = direction;
+        
+        // If at the end and trying to play forward, restart from 0
+        if (playDirection === 1 && currentTime >= durationSeconds - 0.001) {
+            setTime(0, true);
+        }
+        // If at the start and trying to play backwards, restart from end
+        if (playDirection === -1 && currentTime <= 0.001) {
+            setTime(durationSeconds, true);
+        }
+        
+        if (!isPlaying) {
+            isPlaying = true;
+            lastFrameTime = performance.now();
+            playAnimationId = requestAnimationFrame(playLoop);
+        }
+    }
+    
+    function stopPlayback() {
+        isPlaying = false;
+        if (playAnimationId) {
+            cancelAnimationFrame(playAnimationId);
+            playAnimationId = null;
+        }
+    }
+
+    // Connect playback buttons
+    if (btnSkipLeft) btnSkipLeft.addEventListener('click', () => { stopPlayback(); setTime(0, true); });
+    if (btnSkipRight) btnSkipRight.addEventListener('click', () => { stopPlayback(); setTime(durationSeconds, true); });
+    if (btnPlayLeft) btnPlayLeft.addEventListener('click', () => startPlayback(-1));
+    if (btnPlayRight) btnPlayRight.addEventListener('click', () => startPlayback(1));
+    if (btnPause) btnPause.addEventListener('click', stopPlayback);
 
     // Helper to format time for ruler labels
     function formatRulerTime(totalTime) {
