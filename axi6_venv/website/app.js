@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const playhead = document.getElementById('playhead');
     const curveArea = document.getElementById('curve-area');
     const timerDisplay = document.getElementById('timeline-timer');
+    const frameCounter = document.getElementById('frame-counter');
     const dragIndicator = document.getElementById('drag-indicator');
     const timelineContent = document.getElementById('timeline-content');
     const zoomSlider = document.getElementById('zoom-slider');
@@ -112,6 +113,12 @@ document.addEventListener('DOMContentLoaded', () => {
             
         // Update the display text
         timerDisplay.textContent = formattedTime;
+        
+        // Update absolute frame counter UI
+        if (frameCounter) {
+            const absoluteFrame = Math.floor(currentTime * fps);
+            frameCounter.textContent = absoluteFrame;
+        }
         
         // If we are explicitly skipping to a point (Skip buttons, playhead jump), strictly center the camera on it
         if (isSkip && curveArea) {

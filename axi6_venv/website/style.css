@@ -418,11 +418,26 @@
   .w-\[2px\] {
     width: 2px;
   }
+  .w-\[12px\] {
+    width: 12px;
+  }
   .w-\[14px\] {
     width: 14px;
   }
+  .w-\[18px\] {
+    width: 18px;
+  }
+  .w-\[24px\] {
+    width: 24px;
+  }
+  .w-\[36px\] {
+    width: 36px;
+  }
   .w-\[50px\] {
     width: 50px;
+  }
+  .w-\[60px\] {
+    width: 60px;
   }
   .w-\[200px\] {
     width: 200px;
@@ -497,6 +512,9 @@
   }
   .justify-center {
     justify-content: center;
+  }
+  .gap-1 {
+    gap: calc(var(--spacing) * 1);
   }
   .gap-1\.5 {
     gap: calc(var(--spacing) * 1.5);
@@ -645,6 +663,9 @@
   .pl-3 {
     padding-left: calc(var(--spacing) * 3);
   }
+  .text-right {
+    text-align: right;
+  }
   .font-apple {
     font-family: var(--font-apple);
   }
@@ -669,6 +690,9 @@
   }
   .text-\[9px\] {
     font-size: 9px;
+  }
+  .text-\[10px\] {
+    font-size: 10px;
   }
   .font-bold {
     --tw-font-weight: var(--font-weight-bold);
