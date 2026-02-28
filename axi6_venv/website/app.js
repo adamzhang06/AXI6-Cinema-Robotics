@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateTimelineWidth() {
         if (!timelineContent) return;
         const totalWidth = durationSeconds * pixelsPerSecond;
+        timelineContent.style.width = `${totalWidth}px`;
         timelineContent.style.minWidth = `${totalWidth}px`;
     }
     
@@ -365,9 +366,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Loop through the total duration and generate ticks
         for (let t = 0; t <= durationSeconds; t += minorTickInterval) {
-            const percentage = (t / durationSeconds) * 100;
-            // Add a tiny epsilon to handle floating point imprecision for module operator
-            const isMajor = Math.abs((t % majorTickInterval)) < 0.001 || Math.abs((t % majorTickInterval) - majorTickInterval) < 0.001;
+            // Round t to 3 decimal places to prevent floating point drift when accumulating (e.g. 5.00000000001)
+            const tRounded = Math.round(t * 1000) / 1000;
+            
+            const percentage = (tRounded / durationSeconds) * 100;
+            
+            // Add a tiny epsilon and use the firmly rounded t to check for major intervals
+            const isMajor = Math.abs((tRounded % majorTickInterval)) < 0.001 || Math.abs((tRounded % majorTickInterval) - majorTickInterval) < 0.001;
             
             const tick = document.createElement('div');
             tick.className = `absolute bottom-0 w-[1px] bg-white opacity-${isMajor ? '30' : '10'}`;
