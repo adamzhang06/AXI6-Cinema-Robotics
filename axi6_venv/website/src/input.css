@@ -1,13 +1,44 @@
 @import "tailwindcss";
 
 @theme {
-  --color-main: #404040;
+  --color-main: #1B1B1D;
+  --color-main-light: #252528;
   --color-highlight: #FFD500;
-  --color-gap: #111111;
+  --color-gap: #08080A;
+  --font-apple: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 }
 
 :root {
   --bg-main: var(--color-main);
+  --bg-main-light: var(--color-main-light);
   --highlight: var(--color-highlight);
   --bg-gap: var(--color-gap);
+}
+
+@utility panel-header {
+  @apply text-sm text-white font-bold opacity-90 uppercase tracking-widest mb-4;
+}
+
+@utility toolbar-btn {
+  @apply w-full aspect-square bg-[#2a2a2c] rounded cursor-pointer transition-colors duration-200 hover:bg-[#333335] flex items-center justify-center p-0.5;
+}
+
+@utility track-title {
+  @apply text-xs text-white font-bold opacity-80;
+}
+
+@utility track-block {
+  @apply h-1/4 min-h-[60px] border-b border-[#0a0a0c] p-2 flex items-start justify-between transition-colors duration-200 hover:bg-[#252527] cursor-pointer;
+}
+
+@utility track-indicator {
+  @apply w-3 h-3 rounded-full opacity-50 mt-1;
+}
+
+@utility secondary-header {
+  @apply bg-[var(--bg-main)] flex items-center p-2 text-xs text-white/50 h-full;
+}
+
+@utility playback-btn {
+  @apply w-8 h-8 flex items-center justify-center rounded transition-colors duration-200 hover:bg-[#333335] text-white/70 hover:text-white cursor-pointer;
 }

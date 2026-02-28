@@ -9,48 +9,191 @@
     <link rel="stylesheet" href="style.css">
 </head>
 
-<body class="bg-[var(--bg-gap)] h-screen w-screen overflow-hidden text-[#cccccc] font-sans">
+<body class="bg-[var(--bg-gap)] h-screen w-screen overflow-hidden text-[#cccccc] font-apple antialiased">
 
-    <!-- 4-Column Layout: Toolbar(50px) | LeftSidebar(320px) | Center(1fr) | RightSidebar(300px) -->
-    <div class="grid grid-cols-[50px_320px_1fr_300px] h-screen w-screen gap-[2px]">
+    <!-- Application Layout: Top Navbar (36px) | Main Workspace Area (1fr) -->
+    <div class="grid grid-rows-[24px_1fr] h-screen w-screen gap-[2px]">
 
-        <!-- 1. Far Left Toolbar -->
-        <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] text-xs p-2"
-            id="toolbar">
-            Toolbar
-        </div>
-
-        <!-- 2. Left Sidebar (Robot Controls) -->
-        <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] p-4"
-            id="left-sidebar">
-            <h2 class="text-white font-bold mb-4">Robot Controls</h2>
-            <!-- Placeholder for controls -->
-        </div>
-
-        <!-- 3. Center Workspace -->
-        <div class="grid grid-rows-[1fr_300px] gap-[2px]">
-            <!-- Top Viewport -->
-            <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] p-4"
-                id="viewport">
-                <h2 class="text-white font-bold mb-4">Viewport</h2>
-                <!-- 3D Scene / Camera Feed -->
+        <!-- Full-Width Top Navbar -->
+        <div class="bg-[var(--bg-main-light)] flex items-center text-xs w-full h-full text-white">
+            <!-- Matches the 50px Toolbar exactly, centering the AXI6 text above the logo -->
+            <div class="w-[50px] flex justify-center shrink-0">
+                <span class="opacity-100 font-bold tracking-wider">AXI6</span>
             </div>
-            <!-- Bottom Timeline -->
-            <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] p-4"
-                id="timeline">
-                <h2 class="text-white font-bold mb-4">Timeline</h2>
-                <!-- Graph Editor / Keyframes -->
+            <!-- Matches the 2px gap exactly, centering the | separator above the vertical line -->
+            <div class="w-[2px] flex justify-center items-center overflow-visible shrink-0 text-[#cccccc]">
+                <span class="opacity-30">|</span>
             </div>
+            <span class="opacity-100 font-bold pl-3 text-[#cccccc]">Cinema Robotics</span>
         </div>
 
-        <!-- 4. Right Sidebar (Settings) -->
-        <div class="bg-[var(--bg-main)] flex flex-col transition-shadow duration-200 hover:shadow-[inset_0_0_0_1px_var(--highlight)] p-4"
-            id="right-sidebar">
-            <h2 class="text-white font-bold mb-4">Settings</h2>
-            <!-- Export and Config -->
-        </div>
+        <!-- Main Workspace Area: Toolbar(50px) | Center Content(1fr) | Right Sidebar(300px) -->
+        <div class="grid grid-cols-[50px_1fr_300px] gap-[2px] h-full overflow-hidden">
 
-    </div>
+            <!-- 1. Far Left Toolbar -->
+            <div class="bg-[var(--bg-main)] flex flex-col p-1 pt-2 items-center gap-4" id="toolbar">
+                <div class="toolbar-btn">
+                    <img src="assets/axi6_logo.png" alt="LOGO" class="w-full h-full object-contain brightness-150">
+                </div>
+                <!-- Future toolbar icons can go below here -->
+            </div>
+
+            <!-- 2. Main Content Area (Spans everything between Toolbar and Right Sidebar) -->
+            <!-- Contains a top row (Left Sidebar + Viewport) and a bottom row (Timeline), split 50/50 -->
+            <div class="grid grid-rows-[1fr_1fr] gap-[2px]">
+
+                <!-- Top Section: Left Sidebar + Viewport -->
+                <div class="grid grid-cols-[320px_1fr] gap-[2px]">
+                    <!-- Left Sidebar (Robot Controls) -->
+                    <div class="bg-[var(--bg-main)] flex flex-col p-2" id="left-sidebar">
+                        <h2 class="panel-header">Robot Controls</h2>
+                        <!-- Placeholder for controls -->
+                    </div>
+
+                    <!-- Top Viewport -->
+                    <div class="bg-[var(--bg-main)] flex flex-col p-2" id="viewport">
+                        <h2 class="panel-header">Viewport</h2>
+                        <!-- 3D Scene / Camera Feed -->
+                    </div>
+                </div>
+
+                <!-- Bottom Section: Timeline -->
+                <div class="flex flex-col gap-[2px] shrink-0 h-full" id="timeline">
+
+                    <!-- Split Top Header Area -->
+                    <div class="h-[48px] grid grid-cols-[200px_1fr] gap-[2px] w-full shrink-0">
+
+                        <!-- Left Settings Area (Matches Left Sidebar color) -->
+                        <div class="bg-[var(--bg-main)] p-2 flex items-center h-full">
+                            <h2 class="panel-header !mb-0 font-mono tracking-wider text-[var(--highlight)] text-lg"
+                                id="timeline-timer">00:00:00:00</h2>
+                        </div>
+
+                        <!-- Right Functionality Area -->
+                        <div class="secondary-header justify-center relative !py-0">
+                            <!-- Playback Controls -->
+                            <div class="flex items-center gap-1.5 p-0.5">
+                                <!-- Magnet Tool (Snap) -->
+                                <button class="playback-btn" title="Snap to Grid">
+                                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <path
+                                            d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15">
+                                        </path>
+                                        <path d="m5 8 4 4"></path>
+                                        <path d="m12 15 4 4"></path>
+                                    </svg>
+                                </button>
+
+                                <!-- Left Separator -->
+                                <div class="w-[1px] h-4 bg-white/20"></div>
+
+                                <!-- Skip Left -->
+                                <button class="playback-btn" title="Skip Left">
+                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M18 5.5v13L8 12l10-6.5z" />
+                                        <path d="M6 5.5h2v13H6v-13z" />
+                                    </svg>
+                                </button>
+                                <!-- Play Left -->
+                                <button class="playback-btn" title="Play Left">
+                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M18 5.5v13L8 12l10-6.5z" />
+                                    </svg>
+                                </button>
+                                <!-- Pause -->
+                                <button class="playback-btn" title="Pause">
+                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M6 5.5h4v13H6v-13zm8 0h4v13h-4v-13z" />
+                                    </svg>
+                                </button>
+                                <!-- Play Right -->
+                                <button class="playback-btn" title="Play Right">
+                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M6 5.5v13L16 12 6 5.5z" />
+                                    </svg>
+                                </button>
+                                <!-- Skip Right -->
+                                <button class="playback-btn" title="Skip Right">
+                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M6 5.5v13L16 12 6 5.5z" />
+                                        <path d="M16 5.5h2v13h-2v-13z" />
+                                    </svg>
+                                </button>
+
+                                <!-- Right Separator -->
+                                <div class="w-[1px] h-4 bg-white/20"></div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Main Dark Area for Bezier Curves -->
+                    <div class="flex-1 bg-[#0a0a0c] relative overflow-hidden flex">
+                        <!-- The tracks area on the left (matches settings width) -->
+                        <div class="w-[200px] bg-[var(--bg-main)] shrink-0 flex flex-col pt-[2px]">
+                            <!-- Slide Track -->
+                            <div class="track-block">
+                                <span class="track-title">Slide</span>
+                                <!-- Future track controls (visibility, lock, color etc) -->
+                                <div class="track-indicator bg-[var(--highlight)]"></div>
+                            </div>
+
+                            <!-- Pan Track -->
+                            <div class="track-block">
+                                <span class="track-title">Pan</span>
+                                <div class="track-indicator bg-[#ff4444]"></div>
+                            </div>
+
+                            <!-- Tilt Track -->
+                            <div class="track-block">
+                                <span class="track-title">Tilt</span>
+                                <div class="track-indicator bg-[#44ff44]"></div>
+                            </div>
+
+                            <!-- Empty area for future tracks -->
+                            <div class="flex-1"></div>
+                        </div>
+
+                        <!-- The actual curves will be rendered here -->
+                        <div class="flex-1 relative cursor-text group" id="curve-area">
+
+                            <!-- Scrubbing Active Indicator Line -->
+                            <div id="drag-indicator"
+                                class="absolute top-0 left-0 right-0 h-[1px] bg-red-600/70 z-50 pointer-events-none">
+                            </div>
+
+                            <!-- Timeline Ruler (Tick marks and time labels) -->
+                            <div id="timeline-ruler"
+                                class="absolute top-0 left-0 right-0 h-[30px] border-b border-[#1B1B1D] bg-[#0a0a0c]/80 z-20 pointer-events-none origin-top overflow-hidden">
+                                <!-- Tick marks will be injected here via JS -->
+                            </div>
+
+                            <!-- Vertical Playhead Line (z-30 to stay above z-20 ruler) -->
+                            <div id="playhead" class="absolute top-0 bottom-0 w-[2px] bg-red-600 z-30 cursor-ew-resize"
+                                style="left: 0px;">
+                                <!-- Draggable Tab at the top -->
+                                <div
+                                    class="absolute -top-[1px] -left-[6px] w-[14px] h-[16px] bg-red-600 rounded-b-sm border-t border-red-400">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- 3. Right Sidebar (Settings) -->
+            <div class="bg-[var(--bg-main)] flex flex-col p-2" id="right-sidebar">
+                <h2 class="panel-header">Settings</h2>
+                <!-- Export and Config -->
+            </div>
+
+        </div> <!-- End Main Workspace Area -->
+
+    </div> <!-- End Application Layout -->
 
     <!-- Our blank JavaScript file -->
     <script src="app.js"></script>
