@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnPlayRight = document.getElementById('btn-play-right');
     const btnSkipRight = document.getElementById('btn-skip-right');
     
+    const btnToggleCamera = document.getElementById('btn-toggle-camera');
+    
     let isDragging = false;
     let currentTime = 0; // State variable to preserve time across zooms
     
@@ -382,4 +384,74 @@ document.addEventListener('DOMContentLoaded', () => {
     // Draw ruler on load and on window resize
     drawRuler();
     window.addEventListener('resize', drawRuler);
+    
+    // --- WebCam Initialization --- //
+    let isCameraOn = false;
+    let webcamStream = null;
+
+    if (btnToggleCamera) {
+        btnToggleCamera.classList.add('text-white/50');
+    }
+
+    async function initWebcam() {
+        const videoElement = document.getElementById('webcam-preview');
+        if (!videoElement) return;
+
+        try {
+            // Request permission and open the highest resolution video stream available up to 4K
+            webcamStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: "user", // Use front camera by default if available
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }, 
+                audio: false 
+            });
+            
+            videoElement.srcObject = webcamStream;
+        } catch (err) {
+            console.error("Error accessing webcam:", err);
+            isCameraOn = false;
+            if (btnToggleCamera) btnToggleCamera.classList.add('opacity-50');
+            // Optionally, we could show a fallback UI or error message on the screen here
+        }
+    }
+    
+    // Toggle camera visibility
+    if (btnToggleCamera) {
+        btnToggleCamera.addEventListener('click', async () => {
+            const videoElement = document.getElementById('webcam-preview');
+            const indicator = document.getElementById('camera-indicator');
+            if (!videoElement) return;
+
+            isCameraOn = !isCameraOn;
+            
+            if (isCameraOn) {
+                // Determine if we need to request the stream again
+                if (!webcamStream || !webcamStream.active) {
+                    await initWebcam();
+                } else {
+                    videoElement.play();
+                }
+                videoElement.classList.remove('hidden');
+                if (indicator) indicator.classList.remove('hidden');
+                btnToggleCamera.classList.add('text-white');
+                btnToggleCamera.classList.remove('text-white/50');
+            } else {
+                videoElement.pause();
+                
+                // Actively stop the hardware stream to save power and turn off the green light on Mac
+                if (webcamStream) {
+                    webcamStream.getTracks().forEach(track => track.stop());
+                }
+                videoElement.srcObject = null;
+                webcamStream = null;
+
+                videoElement.classList.add('hidden');
+                if (indicator) indicator.classList.add('hidden');
+                btnToggleCamera.classList.remove('text-white');
+                btnToggleCamera.classList.add('text-white/50');
+            }
+        });
+    }
 });

@@ -35,7 +35,19 @@
                 <div class="toolbar-btn">
                     <img src="assets/axi6_logo.png" alt="LOGO" class="w-full h-full object-contain brightness-150">
                 </div>
-                <!-- Future toolbar icons can go below here -->
+
+                <hr class="border-white/10 w-8">
+
+                <button id="btn-toggle-camera"
+                    class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                    title="Toggle Camera">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                        <circle cx="12" cy="13" r="3" />
+                    </svg>
+                </button>
             </div>
 
             <!-- 2. Main Content Area (Spans everything between Toolbar and Right Sidebar) -->
@@ -51,9 +63,20 @@
                     </div>
 
                     <!-- Top Viewport -->
-                    <div class="bg-[var(--bg-main)] flex flex-col p-2" id="viewport">
-                        <h2 class="panel-header">Viewport</h2>
-                        <!-- 3D Scene / Camera Feed -->
+                    <div class="bg-[var(--bg-main)] flex flex-col p-2 relative min-h-0 min-w-0" id="viewport">
+                        <div
+                            class="absolute top-4 left-4 z-10 bg-black/50 backdrop-blur-md px-2 py-1 flex items-center gap-2 rounded text-white/80">
+                            <h2 class="panel-header !mb-0">CAMERA</h2>
+                            <div id="camera-indicator" class="w-2.5 h-2.5 rounded-full bg-red-600 hidden"
+                                style="animation: pulse 0.75s cubic-bezier(0.4, 0, 0.6, 1) infinite;"></div>
+                        </div>
+
+                        <!-- WebCam Feed -->
+                        <div
+                            class="w-full bg-[var(--bg-lighter)] rounded flex-1 overflow-hidden relative min-h-0 min-w-0">
+                            <video id="webcam-preview" autoplay playsinline muted
+                                class="absolute inset-0 w-full h-full object-cover bg-black hidden -scale-x-100"></video>
+                        </div>
                     </div>
                 </div>
 
@@ -73,6 +96,18 @@
                         <div class="secondary-header justify-center relative !py-0">
                             <!-- Playback Controls -->
                             <div class="flex items-center gap-1.5 p-0.5">
+                                <!-- Eraser Tool -->
+                                <button class="playback-btn" title="Eraser Tool">
+                                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <path
+                                            d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+                                        <path d="M22 21H7" />
+                                        <path d="m5 11 9 9" />
+                                    </svg>
+                                </button>
+
                                 <!-- Magnet Tool (Snap) -->
                                 <button class="playback-btn" title="Snap to Grid">
                                     <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
