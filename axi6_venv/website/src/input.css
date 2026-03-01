@@ -42,3 +42,10 @@
 @utility playback-btn {
   @apply w-8 h-8 flex items-center justify-center rounded transition-colors duration-200 hover:bg-[#333335] text-white/70 hover:text-white cursor-pointer;
 }
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

@@ -7,6 +7,19 @@
     <title>AXI6 Robot Cinema Robotics</title>
     <!-- We load the compiled output from Tailwind -->
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Hide scrollbar for curve area */
+        #curve-area::-webkit-scrollbar {
+            display: none;
+        }
+
+        #curve-area {
+            -ms-overflow-style: none;
+            /* IE and Edge */
+            scrollbar-width: none;
+            /* Firefox */
+        }
+    </style>
 </head>
 
 <body class="bg-[var(--bg-gap)] h-screen w-screen overflow-hidden text-[#cccccc] font-apple antialiased">
@@ -251,7 +264,8 @@
                         </div>
 
                         <!-- The actual curves will be rendered here -->
-                        <div class="bg-[#0a0a0c] relative cursor-text group overflow-x-auto min-w-0" id="curve-area">
+                        <div class="bg-[#0a0a0c] relative cursor-text group overflow-x-auto no-scrollbar min-w-0"
+                            id="curve-area">
                             <div id="timeline-content" class="relative h-full" style="width: 6000px;">
                                 <!-- Scrubbing Active Indicator Line -->
                                 <div id="drag-indicator"
