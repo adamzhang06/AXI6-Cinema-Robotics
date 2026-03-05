@@ -14,7 +14,7 @@ results = model.track(
     tracker="botsort.yaml", 
     persist=True, 
     device="mps",         # Uses 28-core GPU
-    stream=True           # Essential for real-time performance
+    stream=True,           # Essential for real-time performance
 )
 
 # 3. Iterate through results to keep the script running
