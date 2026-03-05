@@ -35,6 +35,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // Zoom configurations
     let pixelsPerSecond = 100; // default
     
+    // --- EXPOSE TIMELINE API FOR CURVE EDITOR ---
+    window.TimelineAPI = {
+        get fps() { return fps; },
+        get durationSeconds() { return durationSeconds; },
+        get pixelsPerSecond() { return pixelsPerSecond; },
+        
+        // Hooks for curve-editor.js to redraw shapes when zoom level changes
+        redrawHooks: [],
+        
+        xToFrame(x) {
+            const time = x / pixelsPerSecond;
+            return Math.round(time * fps);
+        },
+        frameToX(frame) {
+            const time = frame / fps;
+            return time * pixelsPerSecond;
+        }
+    };
+    
     function updateZoomRange() {
         if (!zoomSlider || !curveArea) return;
         
@@ -71,6 +90,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalWidth = durationSeconds * pixelsPerSecond;
         timelineContent.style.width = `${totalWidth}px`;
         timelineContent.style.minWidth = `${totalWidth}px`;
+        
+        // Dispatch redraw event to any registered overlays (e.g. curve editor SVG)
+        if (window.TimelineAPI && window.TimelineAPI.redrawHooks) {
+            window.TimelineAPI.redrawHooks.forEach(hook => hook());
+        }
     }
     
     // Initialize
@@ -167,14 +191,18 @@ document.addEventListener('DOMContentLoaded', () => {
         setTime(mappedTime);
     }
     
-    // Start dragging when clicking on the playhead
-    playhead.addEventListener('mousedown', (e) => {
-        stopPlayback(); // Stop any auto-play
-        isDragging = true;
-        // Prevent highlighting text while dragging
-        document.body.style.userSelect = 'none';
-        e.preventDefault();
-    });
+    // Start dragging when clicking on the playhead tab specifically
+    const playheadTab = document.getElementById('playhead-tab');
+    if (playheadTab) {
+        playheadTab.addEventListener('mousedown', (e) => {
+            stopPlayback(); // Stop any auto-play
+            isDragging = true;
+            // Prevent highlighting text while dragging
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+            e.stopPropagation();
+        });
+    }
     
     // Auto-scrolling variables
     let scrollAnimationFrame = null;
@@ -262,15 +290,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Clicking anywhere on the background jumps the playhead to that spot
-    timelineContent.addEventListener('mousedown', (e) => {
-        if (e.target !== playhead && !playhead.contains(e.target)) {
+    // Clicking anywhere on the ruler jumps the playhead to that spot
+    const timelineRuler = document.getElementById('timeline-ruler');
+    if (timelineRuler) {
+        timelineRuler.addEventListener('mousedown', (e) => {
             stopPlayback();
             updatePlayheadPosition(e.clientX);
             isDragging = true;
             document.body.style.userSelect = 'none';
-        }
-    });
+        });
+    }
 
     // --- Playback Controls Logic --- //
     

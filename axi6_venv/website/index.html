@@ -264,8 +264,7 @@
                         </div>
 
                         <!-- The actual curves will be rendered here -->
-                        <div class="bg-[#0a0a0c] relative cursor-text group overflow-x-auto no-scrollbar min-w-0"
-                            id="curve-area">
+                        <div class="bg-[#0a0a0c] relative group overflow-x-auto no-scrollbar min-w-0" id="curve-area">
                             <div id="timeline-content" class="relative h-full" style="width: 6000px;">
                                 <!-- Scrubbing Active Indicator Line -->
                                 <div id="drag-indicator"
@@ -274,25 +273,36 @@
 
                                 <!-- Timeline Ruler (Tick marks and time labels) -->
                                 <div id="timeline-ruler"
-                                    class="absolute top-0 left-0 right-0 h-[30px] border-b border-[#1B1B1D] bg-[#0a0a0c]/80 z-20 pointer-events-none origin-top overflow-hidden">
+                                    class="absolute top-0 left-0 right-0 h-[30px] border-b border-[#1B1B1D] bg-[#0a0a0c]/80 z-20 origin-top overflow-hidden cursor-pointer cursor-text">
                                     <!-- Tick marks will be injected here via JS -->
                                 </div>
 
-                                <!-- Track Lanes Background -->
-                                <div class="absolute bottom-0 left-0 right-0 flex flex-col pointer-events-none z-10"
-                                    style="top: 30px;">
-                                    <div class="flex-1 border-b border-[#1B1B1D]"></div>
-                                    <div class="flex-1 border-b border-[#1B1B1D]"></div>
-                                    <div class="flex-1 border-b border-[#1B1B1D]"></div>
+                                <!-- Track Lanes with SVG Overlays -->
+                                <div class="absolute bottom-0 left-0 right-0 flex flex-col z-10" style="top: 30px;">
+                                    <div id="lane-slide"
+                                        class="flex-1 border-b border-[#1B1B1D] relative overflow-hidden">
+                                        <svg id="svg-slide" class="absolute inset-0 w-full h-full pointer-events-none"
+                                            overflow="visible"></svg>
+                                    </div>
+                                    <div id="lane-pan"
+                                        class="flex-1 border-b border-[#1B1B1D] relative overflow-hidden">
+                                        <svg id="svg-pan" class="absolute inset-0 w-full h-full pointer-events-none"
+                                            overflow="visible"></svg>
+                                    </div>
+                                    <div id="lane-tilt"
+                                        class="flex-1 border-b border-[#1B1B1D] relative overflow-hidden">
+                                        <svg id="svg-tilt" class="absolute inset-0 w-full h-full pointer-events-none"
+                                            overflow="visible"></svg>
+                                    </div>
                                 </div>
 
                                 <!-- Vertical Playhead Line (z-30 to stay above z-20 ruler) -->
                                 <div id="playhead"
-                                    class="absolute top-0 bottom-0 w-[2px] bg-red-600/70 z-30 cursor-ew-resize"
+                                    class="absolute top-0 bottom-0 w-[2px] bg-red-600/70 z-30 pointer-events-none"
                                     style="left: 0px;">
                                     <!-- Draggable Tab at the top -->
-                                    <div
-                                        class="absolute -top-[1px] -left-[6px] w-[14px] h-[16px] bg-red-600 rounded-b-sm border-t border-red-400">
+                                    <div id="playhead-tab"
+                                        class="absolute -top-[1px] -left-[6px] w-[14px] h-[16px] bg-red-600 rounded-b-sm border-t border-red-400 pointer-events-auto cursor-ew-resize">
                                     </div>
                                 </div>
                             </div>
@@ -323,6 +333,8 @@
 
     <!-- Our blank JavaScript file -->
     <script src="app.js"></script>
+    <!-- Curve editor overlay logic -->
+    <script src="curve-editor.js"></script>
 </body>
 
 </html>
