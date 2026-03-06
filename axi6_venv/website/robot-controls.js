@@ -38,9 +38,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Toggle dynamic settings visibility
                 const mode = seg.getAttribute('data-mode');
+                window.operationMode = mode; // Store globally for app.js
+                
+                const selectedTrackingInfo = document.getElementById('selected-tracking-info');
+
                 if (trackingSettings) {
                     if (mode === 'tracking') {
                         trackingSettings.style.display = 'flex';
+                        
+                        // Deselect any active track and show the Tracking settings info
+                        if (window.deselectAllTracks) window.deselectAllTracks();
+                        if (selectedTrackingInfo) selectedTrackingInfo.classList.remove('hidden');
                         
                         // Turn on camera if not already active and mode was just switched to Tracking
                         if (!alreadyActive) {
@@ -52,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     } else {
                         trackingSettings.style.display = 'none';
+                        if (selectedTrackingInfo) selectedTrackingInfo.classList.add('hidden');
                     }
                 }
             });

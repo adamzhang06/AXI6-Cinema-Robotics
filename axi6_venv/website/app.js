@@ -440,13 +440,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectedTrackName = document.getElementById('selected-track-name');
     const selectedTrackColor = document.getElementById('selected-track-color');
 
+    window.deselectAllTracks = () => {
+        trackBlocks.forEach(b => {
+            b.classList.remove('bg-[#FFD500]/15', 'border-l-4', 'border-l-[#FFD500]');
+            b.classList.add('border-b', 'border-[#0a0a0c]');
+        });
+        if (selectedTrackInfo) selectedTrackInfo.classList.add('hidden');
+    };
+
     trackBlocks.forEach(block => {
         block.addEventListener('click', () => {
+            if (window.operationMode === 'tracking') return; // Cannot select tracks in Tracking mode
+
             // Remove highlight from all tracks
-            trackBlocks.forEach(b => {
-                b.classList.remove('bg-[#FFD500]/15', 'border-l-4', 'border-l-[#FFD500]');
-                b.classList.add('border-b', 'border-[#0a0a0c]');
-            });
+            window.deselectAllTracks();
             
             // Add highlight to clicked track
             block.classList.remove('border-b', 'border-[#0a0a0c]');
