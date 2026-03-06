@@ -77,11 +77,129 @@
                 <div class="grid grid-cols-[320px_1fr] gap-[2px]">
                     <!-- Left Sidebar (Robot Controls) -->
                     <div class="bg-[var(--bg-main)] flex flex-col p-2" id="left-sidebar">
-                        <h2 class="panel-header">Robot Controls</h2>
+                        <h2 class="panel-header !mb-2">Robot Controls</h2>
 
+                        <!-- ═══════ JOG D-PADS ═══════ -->
+                        <span class="ctrl-label">Jog</span>
+                        <div style="display:flex; gap:12px; justify-content:center; margin-top:6px;">
 
+                            <!-- ── Slide Joystick (Left/Right only) ── -->
+                            <div style="text-align:center;">
+                                <div class="joystick-ring" style="width:120px; height:120px;">
+                                    <!-- Horizontal Grid -->
+                                    <div
+                                        style="width:100%; height:100%; display:grid; grid-template-columns:1fr 1fr; gap:4px; background-color:#1a1a1c;">
+                                        <!-- Left wedge -->
+                                        <button class="joystick-wedge-grid" data-axis="slide" data-dir="left"
+                                            style="padding-right:12px;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M15 19l-7-7 7-7" />
+                                            </svg>
+                                        </button>
+                                        <!-- Right wedge -->
+                                        <button class="joystick-wedge-grid" data-axis="slide" data-dir="right"
+                                            style="padding-left:12px;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M9 5l7 7-7 7" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <!-- Center Home -->
+                                    <button class="joystick-center" data-axis="slide" data-dir="home">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+                                            <path
+                                                d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <span class="ctrl-label" style="margin-top:4px; display:block;">Slide</span>
+                            </div>
 
-                        <!-- Placeholder for controls -->
+                            <!-- ── Pan & Tilt Joystick (4-way) ── -->
+                            <div style="text-align:center;">
+                                <div class="joystick-ring" style="width:120px; height:120px;">
+                                    <!-- 2x2 Grid rotated 45deg -->
+                                    <div
+                                        style="width:100%; height:100%; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:4px; background-color:#1a1a1c; transform:rotate(45deg);">
+                                        <!-- Top (Top-Left cell gives Up when rotated) -->
+                                        <button class="joystick-wedge-grid" data-axis="tilt" data-dir="up">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
+                                                transform="rotate(-45)">
+                                                <path d="M5 15l7-7 7 7" />
+                                            </svg>
+                                        </button>
+                                        <!-- Right (Top-Right cell gives Right when rotated) -->
+                                        <button class="joystick-wedge-grid" data-axis="pan" data-dir="right">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
+                                                transform="rotate(-45)">
+                                                <path d="M9 5l7 7-7 7" />
+                                            </svg>
+                                        </button>
+                                        <!-- Left (Bottom-Left cell gives Left when rotated) -->
+                                        <button class="joystick-wedge-grid" data-axis="pan" data-dir="left">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
+                                                transform="rotate(-45)">
+                                                <path d="M15 19l-7-7 7-7" />
+                                            </svg>
+                                        </button>
+                                        <!-- Down (Bottom-Right cell gives Down when rotated) -->
+                                        <button class="joystick-wedge-grid" data-axis="tilt" data-dir="down">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
+                                                transform="rotate(-45)">
+                                                <path d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <!-- Center Home -->
+                                    <button class="joystick-center" data-axis="pan-tilt" data-dir="home">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+                                            <path
+                                                d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <span class="ctrl-label" style="margin-top:4px; display:block;">Pan &amp; Tilt</span>
+                            </div>
+                        </div>
+
+                        <!-- ═══════ JOG SPEED ═══════ -->
+                        <div style="margin-top:14px;">
+                            <div
+                                style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                                <span class="ctrl-label">Max Jog Speed</span>
+                                <span id="jog-speed-readout"
+                                    style="font-size:11px; font-weight:600; color:rgba(255,255,255,0.7); font-family:var(--font-mono);">50%</span>
+                            </div>
+                            <input type="range" id="jog-speed-slider" min="0" max="100" value="50"
+                                style="width:100%; height:4px; accent-color:var(--highlight); cursor:pointer;">
+                        </div>
+
+                        <!-- ═══════ DYNAMIC SETTINGS AREA ═══════ -->
+                        <div id="mode-settings-area" style="margin-top:20px; flex:1;">
+                            <!-- Tracking Settings (Hidden by default since Trajectory is default) -->
+                            <div id="tracking-settings" style="display:none; flex-direction:column; gap:8px;">
+                                <span class="ctrl-label">Target Selection</span>
+                                <select class="dark-select">
+                                    <option value="individual">Individual Tracking</option>
+                                    <option value="group">Group Tracking</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- ═══════ MODE TOGGLE ═══════ -->
+                        <div style="margin-bottom:2px;">
+                            <span class="ctrl-label" style="display:block; margin-bottom:6px;">Operation Mode</span>
+                            <div class="mode-pill" id="mode-toggle">
+                                <button class="mode-seg mode-seg-active" data-mode="trajectory">Trajectory</button>
+                                <button class="mode-seg" data-mode="tracking">Tracking</button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Top Viewport -->
@@ -341,6 +459,8 @@
     <script src="app.js"></script>
     <!-- Curve editor overlay logic -->
     <script src="curve-editor.js"></script>
+    <!-- Robot controls panel logic -->
+    <script src="robot-controls.js"></script>
 </body>
 
 </html>

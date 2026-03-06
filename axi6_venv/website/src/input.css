@@ -49,3 +49,131 @@
     display: none;
   }
 }
+
+/* ── Robot Controls: Joystick D-Pad ── */
+
+@utility joystick-ring {
+  position: relative;
+  border-radius: 50%;
+  background-color: #2a2a2c;
+  overflow: hidden;
+}
+
+@utility joystick-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 38%;
+  height: 38%;
+  border-radius: 50%;
+  background-color: #3a3a3e;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--highlight);
+  transition: background-color 150ms ease, color 150ms ease;
+  &:hover {
+    background-color: #4a4a4e;
+  }
+  &:active {
+    background-color: #555558;
+  }
+}
+
+@utility joystick-wedge-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background-color: #2a2a2c;
+  color: var(--highlight);
+  transition: background-color 150ms ease, opacity 150ms ease;
+  opacity: 0.7;
+  &:hover {
+    background-color: #38383b;
+    opacity: 0.9;
+  }
+  &:active {
+    background-color: #4a4a4e;
+    opacity: 1;
+  }
+}
+
+/* ── Robot Controls: Nudge Buttons ── */
+
+@utility nudge-btn {
+  @apply flex items-center justify-center rounded cursor-pointer transition-colors duration-150;
+  width: 28px;
+  height: 24px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  background-color: #2a2a2c;
+  &:hover {
+    background-color: #3a3a3e;
+    color: #fff;
+  }
+  &:active {
+    background-color: #4a4a4e;
+  }
+}
+
+/* ── Robot Controls: Section Label ── */
+
+@utility ctrl-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ── Robot Controls: Mode Toggle ── */
+
+@utility mode-pill {
+  display: flex;
+  border-radius: 6px;
+  background-color: #1a1a1c;
+  overflow: hidden;
+}
+
+@utility mode-seg {
+  flex: 1;
+  padding: 6px 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+  color: rgba(255, 255, 255, 0.4);
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+}
+
+@utility mode-seg-active {
+  background-color: var(--highlight);
+  color: #000;
+  &:hover {
+    background-color: var(--highlight);
+  }
+}
+
+/* ── Robot Controls: Settings ── */
+
+@utility dark-select {
+  @apply w-full bg-[#1a1a1c] text-white/90 text-xs border border-[#333336] rounded px-2 py-1.5 outline-none cursor-pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 5 5-5z' fill='%23666'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+  transition: border-color 150ms ease;
+  &:focus {
+    border-color: var(--highlight);
+  }
+}
