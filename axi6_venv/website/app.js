@@ -710,9 +710,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoElement.classList.remove('hidden');
                 
                 // Toggle Labels
-                const viewportLabel = document.getElementById('viewport-label');
+                const viewportLogo = document.getElementById('viewport-logo');
+                const viewportLogoOutline = document.getElementById('viewport-logo-outline');
                 const cameraLabelContainer = document.getElementById('camera-label-container');
-                if (viewportLabel) viewportLabel.classList.add('hidden');
+                if (viewportLogo) viewportLogo.classList.add('hidden');
+                if (viewportLogoOutline) viewportLogoOutline.classList.add('hidden');
                 if (cameraLabelContainer) cameraLabelContainer.classList.remove('hidden');
                 
                 if (indicator) indicator.classList.remove('hidden');
@@ -731,9 +733,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoElement.classList.add('hidden');
                 
                 // Toggle Labels
-                const viewportLabel = document.getElementById('viewport-label');
+                const viewportLogo = document.getElementById('viewport-logo');
+                const viewportLogoOutline = document.getElementById('viewport-logo-outline');
                 const cameraLabelContainer = document.getElementById('camera-label-container');
-                if (viewportLabel) viewportLabel.classList.remove('hidden');
+                if (viewportLogo) viewportLogo.classList.remove('hidden');
+                if (viewportLogoOutline) viewportLogoOutline.classList.remove('hidden');
                 if (cameraLabelContainer) cameraLabelContainer.classList.add('hidden');
                 
                 if (indicator) indicator.classList.add('hidden');
