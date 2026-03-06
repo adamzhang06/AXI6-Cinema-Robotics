@@ -19,10 +19,16 @@
             scrollbar-width: none;
             /* Firefox */
         }
+
+        body {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+        }
     </style>
 </head>
 
-<body class="bg-[var(--bg-gap)] h-screen w-screen overflow-hidden text-[#cccccc] font-apple antialiased">
+<body class="bg-[var(--bg-gap)] h-screen w-screen overflow-hidden text-[#cccccc] font-apple antialiased select-none">
 
     <!-- Application Layout: Top Navbar (36px) | Main Workspace Area (1fr) -->
     <div class="grid grid-rows-[24px_1fr] h-screen w-screen gap-[2px]">
@@ -273,7 +279,7 @@
 
                                 <!-- Timeline Ruler (Tick marks and time labels) -->
                                 <div id="timeline-ruler"
-                                    class="absolute top-0 left-0 right-0 h-[30px] border-b border-[#1B1B1D] bg-[#0a0a0c]/80 z-20 origin-top overflow-hidden cursor-pointer cursor-text">
+                                    class="absolute top-0 left-0 right-0 h-[30px] border-b border-[#1B1B1D] bg-[#0a0a0c]/80 z-20 origin-top overflow-hidden cursor-ew-resize">
                                     <!-- Tick marks will be injected here via JS -->
                                 </div>
 

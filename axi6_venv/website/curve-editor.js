@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tilt:  '#44ff44',
     };
 
-    const POINT_RADIUS = 5;
+    const DIAMOND_RADIUS = 6;
 
     // ---------------------------------------------------------------
     // INIT – set up each SVG once per track.
@@ -81,23 +81,28 @@ document.addEventListener('DOMContentLoaded', () => {
             pointsGroup.innerHTML = '';
             
             waypoints.forEach((pt, i) => {
-                const circle = document.createElementNS(ns, "circle");
-                circle.setAttribute("cx", window.TimelineAPI.frameToX(pt.frame));
-                circle.setAttribute("cy", pt.y);
-                circle.setAttribute("r", POINT_RADIUS);
-                circle.setAttribute("fill", color);
-                circle.setAttribute("stroke", "#000");
-                circle.setAttribute("stroke-width", "1");
+                const cx = window.TimelineAPI.frameToX(pt.frame);
+                const cy = pt.y;
+                const r = DIAMOND_RADIUS;
+                
+                const diamond = document.createElementNS(ns, "polygon");
+                const points = `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`;
+                
+                diamond.setAttribute("points", points);
+                diamond.setAttribute("fill", color);
+                diamond.setAttribute("stroke", "#000");
+                diamond.setAttribute("stroke-width", "1");
+                diamond.classList.add('waypoint-node');
                 
                 // Keep the points clickable and make them look clickable
                 // We set auto because the parent SVG has pointer-events: none
-                circle.setAttribute("pointer-events", "auto"); 
-                circle.style.cursor = 'grab';
+                diamond.setAttribute("pointer-events", "auto"); 
+                diamond.style.cursor = 'grab';
                 
                 // Data attribute to map node back to data array
-                circle.dataset.index = i;
+                diamond.dataset.index = i;
                 
-                pointsGroup.appendChild(circle);
+                pointsGroup.appendChild(diamond);
             });
         }
         
@@ -128,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- ADD WAYPOINT (double-click on the lane background) ---
         lane.addEventListener('dblclick', (e) => {
             // If they clicked an existing point, ignore
-            if (e.target.tagName === 'circle') return;
+            if (e.target.classList && e.target.classList.contains('waypoint-node')) return;
 
             const pos = getLocalPos(e);
             const frameToInsert = window.TimelineAPI.xToFrame(pos.x);
@@ -152,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // We listen on the svg directly since the points are inside it
         svg.addEventListener('mousedown', (e) => {
             if (e.button !== 0) return; // Only left-click
-            if (e.target.tagName !== 'circle') return;
+            if (!e.target.classList || !e.target.classList.contains('waypoint-node')) return;
 
             const idx = parseInt(e.target.dataset.index, 10);
             
@@ -224,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- RIGHT CLICK (delete point) ---
         svg.addEventListener('contextmenu', (e) => {
-            if (e.target.tagName === 'circle') {
+            if (e.target.classList && e.target.classList.contains('waypoint-node')) {
                 e.preventDefault(); // Stop browser context menu
                 const idx = parseInt(e.target.dataset.index, 10);
                 waypoints.splice(idx, 1);
