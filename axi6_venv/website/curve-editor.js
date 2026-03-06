@@ -248,4 +248,26 @@ document.addEventListener('DOMContentLoaded', () => {
     initTrackSVG('lane-pan',   'svg-pan',   'pan');
     initTrackSVG('lane-tilt',  'svg-tilt',  'tilt');
 
+    // ---------------------------------------------------------------
+    // API: TRIM WAYPOINTS
+    // ---------------------------------------------------------------
+    if (window.TimelineAPI) {
+        window.TimelineAPI.trimWaypoints = function(maxFrame) {
+            let changed = false;
+            ['slide', 'pan', 'tilt'].forEach(key => {
+                const arr = trackData[key];
+                const oldLen = arr.length;
+                for (let i = arr.length - 1; i >= 0; i--) {
+                    if (arr[i].frame > maxFrame) {
+                        arr.splice(i, 1);
+                    }
+                }
+                if (arr.length !== oldLen) changed = true;
+            });
+            if (changed && window.TimelineAPI.redrawHooks) {
+                window.TimelineAPI.redrawHooks.forEach(hook => hook());
+            }
+        };
+    }
+
 });

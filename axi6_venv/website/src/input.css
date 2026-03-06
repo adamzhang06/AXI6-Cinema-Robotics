@@ -24,15 +24,15 @@
 }
 
 @utility track-title {
-  @apply text-xs text-white font-bold opacity-80;
+  @apply text-white/60 text-[10px] font-bold uppercase tracking-wider pl-4;
 }
 
 @utility track-block {
-  @apply h-1/4 min-h-[60px] border-b-[2px] border-[#0a0a0c] p-2 flex items-start justify-between bg-[var(--bg-main)] transition-colors duration-200 hover:bg-[#252527] cursor-pointer;
+  @apply h-14 bg-[var(--bg-lighter)] border-b border-[#0a0a0c] flex flex-col justify-center px-4 cursor-pointer transition-colors duration-150;
 }
 
-@utility track-indicator {
-  @apply w-3 h-3 rounded-full opacity-50 mt-1;
+.track-block:not(.selected):hover {
+  background-color: #252527;
 }
 
 @utility secondary-header {

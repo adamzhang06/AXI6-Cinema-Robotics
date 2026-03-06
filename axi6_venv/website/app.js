@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let playAnimationId = null;
     
     // Configuration: Total timeline duration in seconds and framerate
-    const durationSeconds = 60; // 1 minute max for now
+    let durationSeconds = 120; // 2 minutes max default
     const fps = 30;
     
     // Zoom configurations
@@ -118,6 +118,178 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function formatTimecode(time) {
+        const safeTime = Math.round(time * 1000) / 1000;
+        const hours = Math.floor(safeTime / 3600);
+        const minutes = Math.floor((safeTime % 3600) / 60);
+        const seconds = Math.floor(safeTime % 60);
+        const frames = Math.round((safeTime % 1) * fps);
+        
+        return String(hours).padStart(2, '0') + ':' +
+               String(minutes).padStart(2, '0') + ':' +
+               String(seconds).padStart(2, '0') + ':' +
+               String(frames).padStart(2, '0');
+    }
+
+    // Set up Max Timeline Input
+    const maxTimeInput = document.getElementById('timeline-max-time');
+    const totalFramesDisplay = document.getElementById('total-frames');
+
+    function updateMaxTimeUI() {
+        if (maxTimeInput) maxTimeInput.value = formatTimecode(durationSeconds);
+        if (totalFramesDisplay) totalFramesDisplay.textContent = `/ ${Math.round(durationSeconds * fps)}`;
+    }
+    
+    if (maxTimeInput) {
+        updateMaxTimeUI();
+
+        maxTimeInput.addEventListener('keydown', (e) => {
+            const el = e.target;
+            let val = el.value;
+            let pos = el.selectionStart;
+            let end = el.selectionEnd;
+            let hasSelection = end > pos;
+            
+            // Safety snap: if they clicked somehow into a forbidden spot
+            if (pos === 3 || pos === 6 || pos === 9) pos--;
+
+            // Handle multi-character selection
+            if (hasSelection) {
+                if (e.key === 'Backspace' || e.key === 'Delete') {
+                    e.preventDefault();
+                    let newStr = val;
+                    for (let i = pos; i < end; i++) {
+                        if (newStr[i] !== ':') {
+                            newStr = newStr.substring(0, i) + '0' + newStr.substring(i + 1);
+                        }
+                    }
+                    el.value = newStr;
+                    el.setSelectionRange(pos, pos);
+                    triggerDurationChange(newStr);
+                    return;
+                } else if (/^\d$/.test(e.key)) {
+                    e.preventDefault();
+                    let newStr = val;
+                    for (let i = pos; i < end; i++) {
+                        if (newStr[i] !== ':') {
+                            newStr = newStr.substring(0, i) + '0' + newStr.substring(i + 1);
+                        }
+                    }
+                    let repPos = pos;
+                    if (newStr[repPos] === ':') repPos++;
+                    
+                    if (repPos < end) {
+                        newStr = newStr.substring(0, repPos) + e.key + newStr.substring(repPos + 1);
+                        let newPos = repPos + 1;
+                        if (newPos === 3 || newPos === 6 || newPos === 9) newPos--;
+                        el.value = newStr;
+                        el.setSelectionRange(newPos, newPos);
+                        triggerDurationChange(newStr);
+                    }
+                    return;
+                } else if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    el.setSelectionRange(pos, pos);
+                    return;
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    if (end === 3 || end === 6 || end === 9) end++;
+                    el.setSelectionRange(end, end);
+                    return;
+                }
+            }
+
+            // Only handle Backspace, Delete, Arrow keys, and Digits manually
+            if (e.key === 'Backspace') {
+                e.preventDefault();
+                if (pos > 0) {
+                    pos--;
+                    if (val[pos] === ':') pos--;
+                    
+                    val = val.substring(0, pos) + '0' + val.substring(pos + 1);
+                    el.value = val;
+                    
+                    let newPos = pos;
+                    if (newPos === 3 || newPos === 6 || newPos === 9) newPos--;
+                    
+                    el.setSelectionRange(newPos, newPos);
+                    triggerDurationChange(val);
+                }
+            } else if (e.key === 'Delete') {
+                e.preventDefault();
+                let delPos = pos;
+                if (val[delPos] === ':') delPos++;
+                
+                if (delPos < val.length) {
+                    val = val.substring(0, delPos) + '0' + val.substring(delPos + 1);
+                    el.value = val;
+                    el.setSelectionRange(pos, pos); // Cursor strictly stays where it was
+                    triggerDurationChange(val);
+                }
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (pos > 0) {
+                    pos--;
+                    if (pos === 3 || pos === 6 || pos === 9) pos--; // skip the forbidden index natively
+                    el.setSelectionRange(pos, pos);
+                }
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (pos < val.length) {
+                    pos++;
+                    if (pos === 3 || pos === 6 || pos === 9) pos++; // skip the forbidden index natively
+                    el.setSelectionRange(pos, pos);
+                }
+            } else if (/^\d$/.test(e.key)) {
+                e.preventDefault();
+                let repPos = pos;
+                if (val[repPos] === ':') repPos++;
+                
+                if (repPos < val.length) {
+                    val = val.substring(0, repPos) + e.key + val.substring(repPos + 1);
+                    el.value = val;
+                    
+                    let newPos = repPos + 1;
+                    if (newPos === 3 || newPos === 6 || newPos === 9) newPos--; // safety snap
+                    
+                    el.setSelectionRange(newPos, newPos);
+                    triggerDurationChange(val);
+                }
+            } else if (e.key === 'Tab' || e.key === 'Enter') {
+                // let it pass
+            } else if (e.metaKey || e.ctrlKey) {
+                // let shortcuts pass
+            } else {
+                e.preventDefault();
+            }
+        });
+
+        // Keep normal mouse clicking, but if they click right of a colon, it'll snap perfectly on the first keypress. This avoids visual thrashing.
+        maxTimeInput.addEventListener('paste', e => e.preventDefault());
+
+        function triggerDurationChange(valStr) {
+            const parts = valStr.split(':').map(Number);
+            if (parts.length === 4 && !parts.some(isNaN)) {
+                const newDuration = (parts[0] * 3600) + (parts[1] * 60) + parts[2] + (parts[3] / fps);
+                if (newDuration > 0 && newDuration <= 3600 * 2) { 
+                    durationSeconds = newDuration;
+                    
+                    if (window.TimelineAPI && window.TimelineAPI.trimWaypoints) {
+                        window.TimelineAPI.trimWaypoints(durationSeconds * fps);
+                    }
+                    
+                    if (totalFramesDisplay) totalFramesDisplay.textContent = `/ ${Math.round(durationSeconds * fps)}`;
+                    
+                    updateZoomRange(); // Recalculates limits & calls drawRuler
+                    
+                    if (currentTime > durationSeconds) {
+                        setTime(durationSeconds);
+                    }
+                }
+            }
+        }
+    }
+
     // Helper to jump to a specific time, update UI strictly, and keep playhead anchored during play
     function setTime(time, isSkip = false) {
         preciseTime = Math.max(0, Math.min(durationSeconds, time));
@@ -133,19 +305,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Format time (HH:MM:SS:FF) avoiding floating point precision errors
         const safeTime = Math.round(currentTime * 1000) / 1000;
-        const hours = Math.floor(safeTime / 3600);
-        const minutes = Math.floor((safeTime % 3600) / 60);
-        const seconds = Math.floor(safeTime % 60);
-        const frames = Math.round((safeTime % 1) * fps);
-        
-        const formattedTime = 
-            String(hours).padStart(2, '0') + ':' +
-            String(minutes).padStart(2, '0') + ':' +
-            String(seconds).padStart(2, '0') + ':' +
-            String(frames).padStart(2, '0');
             
         // Update the display text
-        timerDisplay.textContent = formattedTime;
+        timerDisplay.textContent = formatTimecode(safeTime);
         
         // Update absolute frame counter UI
         if (frameCounter) {
@@ -442,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.deselectAllTracks = () => {
         trackBlocks.forEach(b => {
-            b.classList.remove('bg-[#FFD500]/15', 'border-l-4', 'border-l-[#FFD500]');
+            b.classList.remove('bg-[#FFD500]/5', 'border-l-4', 'border-l-[#FFD500]', 'selected');
             b.classList.add('border-b', 'border-[#0a0a0c]');
         });
         if (selectedTrackInfo) selectedTrackInfo.classList.add('hidden');
@@ -457,7 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Add highlight to clicked track
             block.classList.remove('border-b', 'border-[#0a0a0c]');
-            block.classList.add('bg-[#FFD500]/15', 'border-l-4', 'border-l-[#FFD500]');
+            block.classList.add('bg-[#FFD500]/5', 'border-l-4', 'border-l-[#FFD500]', 'selected');
             
             // Update sidebar info
             const name = block.getAttribute('data-name');
