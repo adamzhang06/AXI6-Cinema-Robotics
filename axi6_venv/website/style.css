@@ -945,6 +945,9 @@
   .accent-\[var\(--highlight\)\] {
     accent-color: var(--highlight);
   }
+  .opacity-10 {
+    opacity: 10%;
+  }
   .opacity-30 {
     opacity: 30%;
   }
@@ -986,6 +989,9 @@
   }
   .brightness-150 {
     --tw-brightness: brightness(150%);
+    filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
+  }
+  .filter {
     filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
   }
   .backdrop-blur-md {
@@ -1047,6 +1053,10 @@
 }
 .track-block:not(.selected):hover {
   background-color: #252527;
+}
+.track-block.selected {
+  background-color: #2a2a2e;
+  border-left: 3px solid var(--highlight);
 }
 @property --tw-font-weight {
   syntax: "*";

@@ -33,6 +33,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const DIAMOND_RADIUS = 6;
 
     // ---------------------------------------------------------------
+    // SELECTION STATE — tracks which waypoint is currently selected
+    // ---------------------------------------------------------------
+    let selectedWaypoint = null; // { trackKey, index, element }
+
+    function selectWaypoint(trackKey, index, element) {
+        // Deselect previous
+        if (selectedWaypoint && selectedWaypoint.element) {
+            selectedWaypoint.element.setAttribute('stroke', '#000');
+            selectedWaypoint.element.setAttribute('stroke-width', '1');
+            selectedWaypoint.element.removeAttribute('filter');
+            selectedWaypoint.element.style.removeProperty('filter');
+        }
+
+        // Apply selection styling using the track's own color
+        const color = trackColors[trackKey];
+        element.setAttribute('stroke', '#ffffff');
+        element.setAttribute('stroke-width', '2.5');
+        // Add a glow filter using the track color
+        element.style.filter = `drop-shadow(0 0 4px ${color})`;
+
+        selectedWaypoint = { trackKey, index, element };
+
+        // Link with the rest of the UI selection logic in app.js
+        if (window.selectTrack) {
+            window.selectTrack(`track-${trackKey}`);
+        }
+    }
+
+    function deselectAllWaypoints() {
+        if (selectedWaypoint && selectedWaypoint.element) {
+            selectedWaypoint.element.setAttribute('stroke', '#000');
+            selectedWaypoint.element.setAttribute('stroke-width', '1');
+            selectedWaypoint.element.removeAttribute('filter');
+            selectedWaypoint.element.style.removeProperty('filter');
+        }
+        selectedWaypoint = null;
+    }
+
+    // Expose globally so app.js can call it when tracks are deselected
+    window.deselectAllWaypoints = deselectAllWaypoints;
+
+    // ---------------------------------------------------------------
     // INIT – set up each SVG once per track.
     // ---------------------------------------------------------------
     function initTrackSVG(laneId, svgId, trackKey) {
@@ -93,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 diamond.setAttribute("stroke", "#000");
                 diamond.setAttribute("stroke-width", "1");
                 diamond.classList.add('waypoint-node');
+                diamond.dataset.trackKey = trackKey;
                 
                 // Keep the points clickable and make them look clickable
                 // We set auto because the parent SVG has pointer-events: none
@@ -101,6 +144,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Data attribute to map node back to data array
                 diamond.dataset.index = i;
+                
+                // Re-apply selection styling if this is the currently selected waypoint
+                if (selectedWaypoint && selectedWaypoint.trackKey === trackKey && selectedWaypoint.index === i) {
+                    diamond.setAttribute('stroke', '#ffffff');
+                    diamond.setAttribute('stroke-width', '2.5');
+                    diamond.style.filter = `drop-shadow(0 0 4px ${color})`;
+                    selectedWaypoint.element = diamond; // Update DOM reference
+                }
                 
                 pointsGroup.appendChild(diamond);
             });
@@ -163,10 +214,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Shift+Click = Delete
             if (e.shiftKey) {
+                // If we're deleting the selected waypoint, clear selection
+                if (selectedWaypoint && selectedWaypoint.trackKey === trackKey && selectedWaypoint.index === idx) {
+                    deselectAllWaypoints();
+                }
                 waypoints.splice(idx, 1);
                 draw();
                 return;
             }
+
+            // Select this waypoint
+            selectWaypoint(trackKey, idx, e.target);
 
             // Start drag
             dragIndex = idx;

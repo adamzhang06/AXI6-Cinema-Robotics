@@ -35,6 +35,11 @@
   background-color: #252527;
 }
 
+.track-block.selected {
+  background-color: #2a2a2e;
+  border-left: 3px solid var(--highlight);
+}
+
 @utility secondary-header {
   @apply bg-[var(--bg-main)] flex items-center p-2 text-xs text-white/50 h-full;
 }

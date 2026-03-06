@@ -631,31 +631,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.deselectAllTracks = () => {
         trackBlocks.forEach(b => {
-            b.classList.remove('bg-[#FFD500]/5', 'border-l-4', 'border-l-[#FFD500]', 'selected');
-            b.classList.add('border-b', 'border-[#0a0a0c]');
+            b.classList.remove('selected');
+            b.style.borderLeftColor = '';
         });
         if (selectedTrackInfo) selectedTrackInfo.classList.add('hidden');
+        
+        if (window.deselectAllWaypoints) window.deselectAllWaypoints();
+    };
+
+    window.selectTrack = (trackId) => {
+        if (window.operationMode === 'tracking') return;
+        
+        // Remove highlight from all tracks
+        trackBlocks.forEach(b => {
+             b.classList.remove('selected');
+             b.style.borderLeftColor = '';
+        });
+        
+        const block = document.getElementById(trackId);
+        if (!block) return;
+        
+        block.classList.add('selected');
+        const color = block.getAttribute('data-color');
+        block.style.borderLeftColor = color;
+        
+        const name = block.getAttribute('data-name');
+        if (selectedTrackName) selectedTrackName.textContent = name + ' Axis';
+        if (selectedTrackColor) {
+            selectedTrackColor.style.backgroundColor = color;
+            selectedTrackColor.style.boxShadow = `0 0 8px ${color}`;
+        }
+        
+        if (selectedTrackInfo) selectedTrackInfo.classList.remove('hidden');
+        const trackingInfo = document.getElementById('selected-tracking-info');
+        if (trackingInfo) trackingInfo.classList.add('hidden');
     };
 
     trackBlocks.forEach(block => {
         block.addEventListener('click', () => {
-            if (window.operationMode === 'tracking') return; // Cannot select tracks in Tracking mode
-
-            // Remove highlight from all tracks
+            if (window.operationMode === 'tracking') return;
             window.deselectAllTracks();
-            
-            // Add highlight to clicked track
-            block.classList.remove('border-b', 'border-[#0a0a0c]');
-            block.classList.add('bg-[#FFD500]/5', 'border-l-4', 'border-l-[#FFD500]', 'selected');
-            
-            // Update sidebar info
-            const name = block.getAttribute('data-name');
-            const color = block.getAttribute('data-color');
-            
-            if (selectedTrackName) selectedTrackName.textContent = name;
-            if (selectedTrackColor) selectedTrackColor.style.backgroundColor = color;
-            
-            if (selectedTrackInfo) selectedTrackInfo.classList.remove('hidden');
+            window.selectTrack(block.id);
         });
     });
     
