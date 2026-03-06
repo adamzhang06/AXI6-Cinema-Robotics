@@ -112,10 +112,29 @@ document.addEventListener('DOMContentLoaded', () => {
             updateZoomRange();
         });
         
+        
         zoomOutBtn.addEventListener('click', () => {
             zoomSlider.value = Math.max(0, parseInt(zoomSlider.value) - 10);
             updateZoomRange();
         });
+        
+        const zoomContainer = document.getElementById('zoom-controls-container');
+        if (zoomContainer) {
+            zoomContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const step = 2; // Sensitivity for wheel ticks
+                
+                if (e.deltaY < 0) {
+                    // Scrolling up -> Zoom In
+                    zoomSlider.value = Math.min(100, parseInt(zoomSlider.value) + step);
+                } else if (e.deltaY > 0) {
+                    // Scrolling down -> Zoom Out
+                    zoomSlider.value = Math.max(0, parseInt(zoomSlider.value) - step);
+                }
+                
+                updateZoomRange();
+            }, { passive: false });
+        }
     }
 
     function formatTimecode(time) {
@@ -541,26 +560,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const width = timelineContent.getBoundingClientRect().width;
         if (width === 0) return; // Not visible yet
         
-        // Configuration for ticks (Dynamic based on zoom scale)
-        let majorTickInterval = 1; // Default 1 second
-        let minorTickInterval = 0.25; // Default 0.25 seconds
+        // Configuration for ticks (Dynamic based on zoom scale to prevent text overlap)
+        let majorTickInterval;
+        let minorTickInterval;
         
         if (pixelsPerSecond > 800) {
-            // Very zoomed in
             majorTickInterval = 0.25;
             minorTickInterval = 1/fps; // Frame level ticks
         } else if (pixelsPerSecond > 300) {
-            // Zoomed in
             majorTickInterval = 0.5;
             minorTickInterval = 0.1;
-        } else if (pixelsPerSecond < 30) {
-            // Very zoomed out
-            majorTickInterval = 5;
-            minorTickInterval = 1;
-        } else if (pixelsPerSecond < 60) {
-            // Zoomed out
+        } else if (pixelsPerSecond > 120) {
+            majorTickInterval = 1;
+            minorTickInterval = 0.25;
+        } else if (pixelsPerSecond > 60) {
             majorTickInterval = 2;
             minorTickInterval = 0.5;
+        } else if (pixelsPerSecond > 30) {
+            majorTickInterval = 5;
+            minorTickInterval = 1;
+        } else if (pixelsPerSecond > 15) {
+            majorTickInterval = 10;
+            minorTickInterval = 2;
+        } else if (pixelsPerSecond > 5) {
+            majorTickInterval = 30;
+            minorTickInterval = 5;
+        } else {
+            majorTickInterval = 60;
+            minorTickInterval = 10;
         }
         
         // Loop through the total duration and generate ticks
