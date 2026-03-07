@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tilt:  '#44ff44',
     };
 
-    const DIAMOND_RADIUS = 6;
+    const DIAMOND_RADIUS = 3;
 
     // ---------------------------------------------------------------
     // SELECTION STATE — tracks which waypoint is currently selected
@@ -101,6 +101,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const pointsGroup = document.createElementNS(ns, "g");
         svg.appendChild(pointsGroup);
 
+        // Initialize start and end waypoints if empty
+        if (waypoints.length === 0) {
+            const initialY = lane.clientHeight ? lane.clientHeight / 2 : 100;
+            const maxFrame = window.TimelineAPI.durationSeconds * window.TimelineAPI.fps;
+            waypoints.push({ frame: 0, y: initialY });
+            waypoints.push({ frame: maxFrame, y: initialY });
+        }
+
         // ---------------------------------------------------------------
         // UPDATE — Rebuild the path and circle nodes
         // ---------------------------------------------------------------
@@ -133,9 +141,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cx = window.TimelineAPI.frameToX(pt.frame);
                 const cy = pt.y;
                 const r = DIAMOND_RADIUS;
+                const ry = r * 2.0; // Taller than it is wide
                 
                 const diamond = document.createElementNS(ns, "polygon");
-                const points = `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`;
+                const points = `${cx},${cy - ry} ${cx + r},${cy} ${cx},${cy + ry} ${cx - r},${cy}`;
                 
                 diamond.setAttribute("points", points);
                 diamond.setAttribute("fill", isLocked ? "#888888" : "#ffffff");
@@ -226,17 +235,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const idx = parseInt(e.target.dataset.index, 10);
             
-            // Shift+Click = Delete
-            if (e.shiftKey) {
-                // If we're deleting the selected waypoint, clear selection
-                if (selectedWaypoint && selectedWaypoint.trackKey === trackKey && selectedWaypoint.index === idx) {
-                    deselectAllWaypoints();
-                }
-                waypoints.splice(idx, 1);
-                draw();
-                return;
-            }
-
             // Select this waypoint
             selectWaypoint(trackKey, idx, e.target);
 
@@ -260,21 +258,33 @@ document.addEventListener('DOMContentLoaded', () => {
             const pos = getLocalPos(e);
             let targetFrame = window.TimelineAPI.xToFrame(pos.x);
             
-            // We lock the drag boundaries dynamically between the previous and next points (if any)
-            let minFrame = 0;
-            let maxFrame = window.TimelineAPI.durationSeconds * window.TimelineAPI.fps;
-            
-            // Ensure bounds
-            const sortedIdx = waypoints.indexOf(isDraggingPointData);
-            if (sortedIdx > 0) {
-                minFrame = waypoints[sortedIdx - 1].frame + 1;
-            }
-            if (sortedIdx < waypoints.length - 1) {
-                maxFrame = waypoints[sortedIdx + 1].frame - 1;
-            }
+            if (e.shiftKey) {
+                // Shift-drag locks horizontal movement to current frame
+                targetFrame = isDraggingPointData.frame;
+            } else {
+                // We lock the drag boundaries dynamically between the previous and next points (if any)
+                let minFrame = 0;
+                let maxFrame = window.TimelineAPI.durationSeconds * window.TimelineAPI.fps;
+                
+                // Ensure bounds
+                const sortedIdx = waypoints.indexOf(isDraggingPointData);
+                
+                if (sortedIdx === 0) {
+                    // First waypoint locked to 0
+                    maxFrame = 0;
+                    minFrame = 0;
+                } else if (sortedIdx === waypoints.length - 1) {
+                    // Last waypoint locked to max frame
+                    minFrame = maxFrame;
+                } else {
+                    // Interior waypoints bounded by neighbors
+                    minFrame = waypoints[sortedIdx - 1].frame + 1;
+                    maxFrame = waypoints[sortedIdx + 1].frame - 1;
+                }
 
-            // Clamp frame and Y bounds
-            targetFrame = Math.max(minFrame, Math.min(maxFrame, targetFrame));
+                // Clamp frame bounds
+                targetFrame = Math.max(minFrame, Math.min(maxFrame, targetFrame));
+            }
 
             // Update data model
             isDraggingPointData.frame = targetFrame;
@@ -304,6 +314,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target.classList && e.target.classList.contains('waypoint-node')) {
                 e.preventDefault(); // Stop browser context menu
                 const idx = parseInt(e.target.dataset.index, 10);
+                // Prevent deleting start or end waypoints
+                if (idx === 0 || idx === waypoints.length - 1) return;
                 waypoints.splice(idx, 1);
                 draw();
             }
@@ -328,13 +340,26 @@ document.addEventListener('DOMContentLoaded', () => {
             let changed = false;
             ['slide', 'pan', 'tilt'].forEach(key => {
                 const arr = trackData[key];
+                if (arr.length === 0) return;
+                
+                // Get the height of the current end waypoint
+                const oldLastY = arr[arr.length - 1].y;
+                
+                // Remove the current end waypoint
+                arr.pop();
+                
+                // Remove any other waypoints that are now at or beyond the new maxFrame
                 const oldLen = arr.length;
                 for (let i = arr.length - 1; i >= 0; i--) {
-                    if (arr[i].frame > maxFrame) {
+                    if (arr[i].frame >= maxFrame) {
                         arr.splice(i, 1);
                     }
                 }
-                if (arr.length !== oldLen) changed = true;
+                
+                // Re-add the end waypoint at the new maxFrame with the original height
+                arr.push({ frame: maxFrame, y: oldLastY });
+                
+                changed = true; // maxFrame change always constitutes an update for the end node
             });
             if (changed && window.TimelineAPI.redrawHooks) {
                 window.TimelineAPI.redrawHooks.forEach(hook => hook());
