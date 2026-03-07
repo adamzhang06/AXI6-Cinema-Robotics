@@ -396,7 +396,7 @@
                                             </svg>
                                         </button>
                                         <!-- Lock Toggle -->
-                                        <button class="text-white/40 hover:text-white transition-colors"
+                                        <button class="lock-toggle-btn text-white/40 hover:text-white transition-colors"
                                             title="Lock Track" onclick="event.stopPropagation()">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"
                                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -428,7 +428,7 @@
                                                 <circle cx="12" cy="12" r="3" />
                                             </svg>
                                         </button>
-                                        <button class="text-white/40 hover:text-white transition-colors"
+                                        <button class="lock-toggle-btn text-white/40 hover:text-white transition-colors"
                                             title="Lock Track" onclick="event.stopPropagation()">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"
                                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -460,7 +460,7 @@
                                                 <circle cx="12" cy="12" r="3" />
                                             </svg>
                                         </button>
-                                        <button class="text-white/40 hover:text-white transition-colors"
+                                        <button class="lock-toggle-btn text-white/40 hover:text-white transition-colors"
                                             title="Lock Track" onclick="event.stopPropagation()">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"
                                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -498,6 +498,9 @@
                                         <div id="overlay-slide"
                                             class="absolute inset-0 bg-hex-mesh opacity-0 pointer-events-none transition-opacity duration-300 z-0">
                                         </div>
+                                        <div id="lock-overlay-slide"
+                                            class="absolute inset-0 bg-white/10 opacity-0 pointer-events-none transition-opacity duration-300 z-20">
+                                        </div>
                                         <svg id="svg-slide"
                                             class="absolute inset-0 w-full h-full pointer-events-none z-10"
                                             overflow="visible"></svg>
@@ -507,6 +510,9 @@
                                         <div id="overlay-pan"
                                             class="absolute inset-0 bg-hex-mesh opacity-0 pointer-events-none transition-opacity duration-300 z-0">
                                         </div>
+                                        <div id="lock-overlay-pan"
+                                            class="absolute inset-0 bg-white/10 opacity-0 pointer-events-none transition-opacity duration-300 z-20">
+                                        </div>
                                         <svg id="svg-pan"
                                             class="absolute inset-0 w-full h-full pointer-events-none z-10"
                                             overflow="visible"></svg>
@@ -515,6 +521,9 @@
                                         class="flex-1 border-b border-[#1B1B1D] relative overflow-hidden">
                                         <div id="overlay-tilt"
                                             class="absolute inset-0 bg-hex-mesh opacity-0 pointer-events-none transition-opacity duration-300 z-0">
+                                        </div>
+                                        <div id="lock-overlay-tilt"
+                                            class="absolute inset-0 bg-white/10 opacity-0 pointer-events-none transition-opacity duration-300 z-20">
                                         </div>
                                         <svg id="svg-tilt"
                                             class="absolute inset-0 w-full h-full pointer-events-none z-10"

@@ -35,6 +35,50 @@ document.addEventListener('DOMContentLoaded', () => {
     // Zoom configurations
     let pixelsPerSecond = 100; // default
     
+    // --- TRACK LOCK TOGGLE LOGIC ---
+    window.lockedTracks = new Set();
+    const lockButtons = document.querySelectorAll('.lock-toggle-btn');
+    
+    lockButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation(); // don't click the track block behind it
+            
+            const trackBlock = btn.closest('.track-block');
+            const trackId = trackBlock.id.replace('track-', '');
+            
+            // Toggle active visual state
+            if (btn.classList.contains('text-white')) {
+                // Unlock
+                btn.classList.remove('text-white');
+                btn.classList.add('text-white/40');
+                
+                const overlay = document.getElementById(`lock-overlay-${trackId}`);
+                if (overlay) overlay.classList.remove('opacity-100');
+                
+                window.lockedTracks.delete(trackId);
+            } else {
+                // Lock
+                btn.classList.remove('text-white/40');
+                btn.classList.add('text-white');
+                
+                const overlay = document.getElementById(`lock-overlay-${trackId}`);
+                if (overlay) overlay.classList.add('opacity-100');
+                
+                window.lockedTracks.add(trackId);
+                
+                // Deselect if active (user's choice to lock means they shouldn't edit settings either)
+                if (trackBlock.classList.contains('selected')) {
+                    window.deselectAllTracks();
+                }
+            }
+            
+            // Re-draw curves to update cursor styles for locked waypoints
+            if (window.TimelineAPI && window.TimelineAPI.redrawHooks) {
+                window.TimelineAPI.redrawHooks.forEach(hook => hook());
+            }
+        });
+    });
+
     // --- EXPOSE TIMELINE API FOR CURVE EDITOR ---
     window.TimelineAPI = {
         get fps() { return fps; },

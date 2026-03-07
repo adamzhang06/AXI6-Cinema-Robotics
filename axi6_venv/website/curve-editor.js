@@ -141,10 +141,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 diamond.classList.add('waypoint-node');
                 diamond.dataset.trackKey = trackKey;
                 
+                const isLocked = window.lockedTracks && window.lockedTracks.has(trackKey);
+                
                 // Keep the points clickable and make them look clickable if active
                 if (!isHidden) {
-                    diamond.setAttribute("pointer-events", "auto"); 
-                    diamond.style.cursor = 'grab';
+                    diamond.setAttribute("pointer-events", "auto");
+                    diamond.style.cursor = isLocked ? 'default' : 'grab';
                 } else {
                     diamond.style.pointerEvents = 'none'; // fully disable clicks on the point itself
                 }
@@ -191,6 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- ADD WAYPOINT (double-click on the lane background) ---
         lane.addEventListener('dblclick', (e) => {
             if (window.hiddenTracks && window.hiddenTracks.has(trackKey)) return;
+            if (window.lockedTracks && window.lockedTracks.has(trackKey)) return;
             // If they clicked an existing point, ignore
             if (e.target.classList && e.target.classList.contains('waypoint-node')) return;
 
@@ -216,6 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // We listen on the svg directly since the points are inside it
         svg.addEventListener('mousedown', (e) => {
             if (window.hiddenTracks && window.hiddenTracks.has(trackKey)) return;
+            if (window.lockedTracks && window.lockedTracks.has(trackKey)) return;
             if (e.button !== 0) return; // Only left-click
             if (!e.target.classList || !e.target.classList.contains('waypoint-node')) return;
 
