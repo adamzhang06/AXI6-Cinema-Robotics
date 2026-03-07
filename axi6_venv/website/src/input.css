@@ -24,7 +24,7 @@
 }
 
 @utility track-title {
-  @apply text-white/60 text-[10px] font-bold uppercase tracking-wider pl-4;
+  @apply text-white/70 text-[12px] font-bold uppercase tracking-widest pl-2;
 }
 
 @utility track-block {
@@ -38,6 +38,13 @@
 .track-block.selected {
   background-color: #2a2a2e;
   border-left: 3px solid var(--highlight);
+}
+
+@utility bg-hex-mesh {
+  background-image: url("data:image/svg+xml,%3Csvg width='24' height='41.5' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 0l12 20.75-12 20.75L0 20.75z' fill='none' stroke='%23333' stroke-width='1.5' stroke-opacity='0.4'/%3E%3C/svg%3E");
+  background-size: 6px 10px;
+  background-color: rgba(20, 20, 20, 0.4);
+  background-repeat: repeat;
 }
 
 @utility secondary-header {

@@ -670,8 +670,76 @@ document.addEventListener('DOMContentLoaded', () => {
     trackBlocks.forEach(block => {
         block.addEventListener('click', () => {
             if (window.operationMode === 'tracking') return;
+            
+            const trackId = block.id.replace('track-', '');
+            if (window.hiddenTracks && window.hiddenTracks.has(trackId)) return;
+            
             window.deselectAllTracks();
             window.selectTrack(block.id);
+        });
+    });
+    
+    // --- Track Visibility Toggle --- //
+    const visibilityButtons = document.querySelectorAll('.visibility-toggle-btn');
+    const eyeOpenSVG = `<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" />`;
+    const eyeClosedSVG = `<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" /><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" /><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" /><line x1="2" x2="22" y1="2" y2="22" />`;
+
+    window.hiddenTracks = new Set();
+
+    visibilityButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const svg = btn.querySelector('svg');
+            const trackBlock = btn.closest('.track-block');
+            const indicator = trackBlock.querySelector('.track-indicator');
+            const trackId = trackBlock.id.replace('track-', '');
+            
+            if (svg.classList.contains('eye-open')) {
+                // Switch to closed state
+                svg.classList.remove('eye-open');
+                svg.classList.add('eye-closed');
+                svg.innerHTML = eyeClosedSVG;
+                
+                // Style button red
+                btn.classList.remove('text-white/40', 'hover:text-white');
+                btn.classList.add('text-red-500', 'hover:text-red-400');
+                
+                // Dim indicator
+                indicator.style.opacity = '0.2';
+                indicator.style.boxShadow = 'none';
+                
+                const overlay = document.getElementById(`overlay-${trackId}`);
+                if (overlay) overlay.classList.add('opacity-100');
+                
+                window.hiddenTracks.add(trackId);
+                
+                if (trackBlock.classList.contains('selected')) {
+                    window.deselectAllTracks();
+                }
+            } else {
+                // Switch to open state
+                svg.classList.remove('eye-closed');
+                svg.classList.add('eye-open');
+                svg.innerHTML = eyeOpenSVG;
+                
+                // Revert button styling
+                btn.classList.remove('text-red-500', 'hover:text-red-400');
+                btn.classList.add('text-white/40', 'hover:text-white');
+                
+                // Restore indicator
+                indicator.style.opacity = '1';
+                indicator.style.boxShadow = ''; // Inherits from original CSS class
+                
+                const overlay = document.getElementById(`overlay-${trackId}`);
+                if (overlay) overlay.classList.remove('opacity-100');
+                
+                window.hiddenTracks.delete(trackId);
+            }
+            
+            // Re-draw curves to reflect new disabled styling
+            if (window.TimelineAPI && window.TimelineAPI.redrawHooks) {
+                window.TimelineAPI.redrawHooks.forEach(hook => hook());
+            }
         });
     });
     

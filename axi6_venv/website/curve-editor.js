@@ -114,10 +114,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            const isHidden = window.hiddenTracks && window.hiddenTracks.has(trackKey);
+            const drawColor = isHidden ? 'rgba(100, 100, 100, 0.3)' : color;
+            
             // Update line
             // TODO: Swap out polyline points generation for your Bezier/spline path generator
             const pointsStr = waypoints.map(pt => `${window.TimelineAPI.frameToX(pt.frame)},${pt.y}`).join(' ');
             polyline.setAttribute('points', pointsStr);
+            polyline.setAttribute('stroke', drawColor);
 
             // Brutal but simple: clear all point nodes and rebuild
             pointsGroup.innerHTML = '';
@@ -131,22 +135,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 const points = `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`;
                 
                 diamond.setAttribute("points", points);
-                diamond.setAttribute("fill", color);
+                diamond.setAttribute("fill", drawColor);
                 diamond.setAttribute("stroke", "#000");
                 diamond.setAttribute("stroke-width", "1");
                 diamond.classList.add('waypoint-node');
                 diamond.dataset.trackKey = trackKey;
                 
-                // Keep the points clickable and make them look clickable
-                // We set auto because the parent SVG has pointer-events: none
-                diamond.setAttribute("pointer-events", "auto"); 
-                diamond.style.cursor = 'grab';
+                // Keep the points clickable and make them look clickable if active
+                if (!isHidden) {
+                    diamond.setAttribute("pointer-events", "auto"); 
+                    diamond.style.cursor = 'grab';
+                } else {
+                    diamond.style.pointerEvents = 'none'; // fully disable clicks on the point itself
+                }
                 
                 // Data attribute to map node back to data array
                 diamond.dataset.index = i;
                 
                 // Re-apply selection styling if this is the currently selected waypoint
-                if (selectedWaypoint && selectedWaypoint.trackKey === trackKey && selectedWaypoint.index === i) {
+                if (!isHidden && selectedWaypoint && selectedWaypoint.trackKey === trackKey && selectedWaypoint.index === i) {
                     diamond.setAttribute('stroke', '#ffffff');
                     diamond.setAttribute('stroke-width', '2.5');
                     diamond.style.filter = `drop-shadow(0 0 4px ${color})`;
@@ -183,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- ADD WAYPOINT (double-click on the lane background) ---
         lane.addEventListener('dblclick', (e) => {
+            if (window.hiddenTracks && window.hiddenTracks.has(trackKey)) return;
             // If they clicked an existing point, ignore
             if (e.target.classList && e.target.classList.contains('waypoint-node')) return;
 
@@ -207,6 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- MOUSE DOWN (on a point) ---
         // We listen on the svg directly since the points are inside it
         svg.addEventListener('mousedown', (e) => {
+            if (window.hiddenTracks && window.hiddenTracks.has(trackKey)) return;
             if (e.button !== 0) return; // Only left-click
             if (!e.target.classList || !e.target.classList.contains('waypoint-node')) return;
 
