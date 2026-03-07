@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnPause = document.getElementById('btn-pause');
     const btnPlayRight = document.getElementById('btn-play-right');
     const btnSkipRight = document.getElementById('btn-skip-right');
+    const btnEraser = document.getElementById('btn-eraser');
     
     const btnToggleCamera = document.getElementById('btn-toggle-camera');
     
@@ -591,6 +592,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnPlayLeft) btnPlayLeft.addEventListener('click', () => startPlayback(-1));
     if (btnPlayRight) btnPlayRight.addEventListener('click', () => startPlayback(1));
     if (btnPause) btnPause.addEventListener('click', stopPlayback);
+    
+    if (btnEraser) {
+        btnEraser.addEventListener('click', () => {
+            if (confirm("Are you sure you want to clear all waypoints? This will reset them to the center of each axis.")) {
+                if (window.TimelineAPI && window.TimelineAPI.clearAllWaypoints) {
+                    window.TimelineAPI.clearAllWaypoints();
+                }
+            }
+        });
+    }
 
     // Helper to format time for ruler labels
     function formatRulerTime(totalTime) {

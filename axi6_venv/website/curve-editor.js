@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tilt:  '#44ff44',
     };
 
-    const DIAMOND_RADIUS = 3;
+    const DIAMOND_RADIUS = 5;
 
     // ---------------------------------------------------------------
     // SELECTION STATE — tracks which waypoint is currently selected
@@ -141,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cx = window.TimelineAPI.frameToX(pt.frame);
                 const cy = pt.y;
                 const r = DIAMOND_RADIUS;
-                const ry = r * 2.0; // Taller than it is wide
+                const ry = r; // Normal symmetrical diamond
                 
                 const diamond = document.createElementNS(ns, "polygon");
                 const points = `${cx},${cy - ry} ${cx + r},${cy} ${cx},${cy + ry} ${cx - r},${cy}`;
@@ -363,6 +363,27 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (changed && window.TimelineAPI.redrawHooks) {
                 window.TimelineAPI.redrawHooks.forEach(hook => hook());
+            }
+        };
+
+        window.TimelineAPI.clearAllWaypoints = function() {
+            ['slide', 'pan', 'tilt'].forEach(key => {
+                const arr = trackData[key];
+                const lane = document.getElementById(`lane-${key}`);
+                const initialY = lane && lane.clientHeight ? lane.clientHeight / 2 : 100;
+                const maxFrame = window.TimelineAPI.durationSeconds * window.TimelineAPI.fps;
+                
+                // Keep only two waypoints: start and end in the vertical center
+                arr.length = 0; 
+                arr.push({ frame: 0, y: initialY });
+                arr.push({ frame: maxFrame, y: initialY });
+            });
+            
+            if (window.TimelineAPI.redrawHooks) {
+                window.TimelineAPI.redrawHooks.forEach(hook => hook());
+            }
+            if (window.deselectAllWaypoints) {
+                window.deselectAllWaypoints();
             }
         };
     }
