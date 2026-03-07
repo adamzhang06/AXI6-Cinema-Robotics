@@ -115,13 +115,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const isHidden = window.hiddenTracks && window.hiddenTracks.has(trackKey);
+            const isLocked = window.lockedTracks && window.lockedTracks.has(trackKey);
             const drawColor = isHidden ? 'rgba(100, 100, 100, 0.3)' : color;
+            const lockOpacity = isLocked ? '0.3' : '1';
             
             // Update line
             // TODO: Swap out polyline points generation for your Bezier/spline path generator
             const pointsStr = waypoints.map(pt => `${window.TimelineAPI.frameToX(pt.frame)},${pt.y}`).join(' ');
             polyline.setAttribute('points', pointsStr);
             polyline.setAttribute('stroke', drawColor);
+            polyline.setAttribute('stroke-opacity', lockOpacity);
 
             // Brutal but simple: clear all point nodes and rebuild
             pointsGroup.innerHTML = '';
@@ -135,30 +138,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 const points = `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`;
                 
                 diamond.setAttribute("points", points);
-                diamond.setAttribute("fill", drawColor);
-                diamond.setAttribute("stroke", "#000");
+                diamond.setAttribute("fill", isLocked ? "#888888" : "#ffffff");
+                diamond.setAttribute("stroke", isLocked ? "#444444" : "#000");
                 diamond.setAttribute("stroke-width", "1");
+                diamond.setAttribute("fill-opacity", "1");
+                diamond.setAttribute("stroke-opacity", "1");
                 diamond.classList.add('waypoint-node');
                 diamond.dataset.trackKey = trackKey;
                 
-                const isLocked = window.lockedTracks && window.lockedTracks.has(trackKey);
-                
                 // Keep the points clickable and make them look clickable if active
-                if (!isHidden) {
+                if (!isLocked) {
                     diamond.setAttribute("pointer-events", "auto");
-                    diamond.style.cursor = isLocked ? 'default' : 'grab';
+                    diamond.style.cursor = 'grab';
                 } else {
-                    diamond.style.pointerEvents = 'none'; // fully disable clicks on the point itself
+                    diamond.style.pointerEvents = 'none'; // Lock fully disables clicks on the point itself
                 }
                 
                 // Data attribute to map node back to data array
                 diamond.dataset.index = i;
                 
                 // Re-apply selection styling if this is the currently selected waypoint
-                if (!isHidden && selectedWaypoint && selectedWaypoint.trackKey === trackKey && selectedWaypoint.index === i) {
+                if (!isLocked && selectedWaypoint && selectedWaypoint.trackKey === trackKey && selectedWaypoint.index === i) {
                     diamond.setAttribute('stroke', '#ffffff');
                     diamond.setAttribute('stroke-width', '2.5');
-                    diamond.style.filter = `drop-shadow(0 0 4px ${color})`;
+                    diamond.style.filter = `drop-shadow(0 0 4px #ffffff)`;
                     selectedWaypoint.element = diamond; // Update DOM reference
                 }
                 
@@ -192,7 +195,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- ADD WAYPOINT (double-click on the lane background) ---
         lane.addEventListener('dblclick', (e) => {
-            if (window.hiddenTracks && window.hiddenTracks.has(trackKey)) return;
             if (window.lockedTracks && window.lockedTracks.has(trackKey)) return;
             // If they clicked an existing point, ignore
             if (e.target.classList && e.target.classList.contains('waypoint-node')) return;
@@ -218,7 +220,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- MOUSE DOWN (on a point) ---
         // We listen on the svg directly since the points are inside it
         svg.addEventListener('mousedown', (e) => {
-            if (window.hiddenTracks && window.hiddenTracks.has(trackKey)) return;
             if (window.lockedTracks && window.lockedTracks.has(trackKey)) return;
             if (e.button !== 0) return; // Only left-click
             if (!e.target.classList || !e.target.classList.contains('waypoint-node')) return;

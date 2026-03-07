@@ -38,6 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- TRACK LOCK TOGGLE LOGIC ---
     window.lockedTracks = new Set();
     const lockButtons = document.querySelectorAll('.lock-toggle-btn');
+    const lockSVG = `<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />`;
+    const unlockSVG = `<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" />`;
     
     lockButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -45,24 +47,31 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const trackBlock = btn.closest('.track-block');
             const trackId = trackBlock.id.replace('track-', '');
+            const svg = btn.querySelector('svg');
             
             // Toggle active visual state
-            if (btn.classList.contains('text-white')) {
+            if (btn.classList.contains('text-red-500')) {
                 // Unlock
-                btn.classList.remove('text-white');
-                btn.classList.add('text-white/40');
-                
-                const overlay = document.getElementById(`lock-overlay-${trackId}`);
-                if (overlay) overlay.classList.remove('opacity-100');
+                btn.classList.remove('text-red-500', 'hover:text-red-400');
+                btn.classList.add('text-white/40', 'hover:text-white');
+                if (svg) {
+                    svg.innerHTML = unlockSVG;
+                    svg.classList.replace('lock-icon', 'unlock-icon');
+                }
                 
                 window.lockedTracks.delete(trackId);
             } else {
                 // Lock
-                btn.classList.remove('text-white/40');
-                btn.classList.add('text-white');
-                
-                const overlay = document.getElementById(`lock-overlay-${trackId}`);
-                if (overlay) overlay.classList.add('opacity-100');
+                btn.classList.remove('text-white/40', 'hover:text-white');
+                btn.classList.add('text-red-500', 'hover:text-red-400');
+                if (svg) {
+                    svg.innerHTML = lockSVG;
+                    if (svg.classList.contains('unlock-icon')) {
+                        svg.classList.replace('unlock-icon', 'lock-icon');
+                    } else {
+                        svg.classList.add('lock-icon');
+                    }
+                }
                 
                 window.lockedTracks.add(trackId);
                 
@@ -716,7 +725,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (window.operationMode === 'tracking') return;
             
             const trackId = block.id.replace('track-', '');
-            if (window.hiddenTracks && window.hiddenTracks.has(trackId)) return;
+            if (window.lockedTracks && window.lockedTracks.has(trackId)) return;
             
             window.deselectAllTracks();
             window.selectTrack(block.id);
@@ -744,7 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 svg.classList.add('eye-closed');
                 svg.innerHTML = eyeClosedSVG;
                 
-                // Style button red
+                // Change button styling
                 btn.classList.remove('text-white/40', 'hover:text-white');
                 btn.classList.add('text-red-500', 'hover:text-red-400');
                 
@@ -756,10 +765,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (overlay) overlay.classList.add('opacity-100');
                 
                 window.hiddenTracks.add(trackId);
-                
-                if (trackBlock.classList.contains('selected')) {
-                    window.deselectAllTracks();
-                }
             } else {
                 // Switch to open state
                 svg.classList.remove('eye-closed');
